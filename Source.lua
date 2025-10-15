@@ -16040,6 +16040,9 @@ cmd.add({"unpermadeath", "unpdeath"}, {"unpermadeath (unpdeath)", "no perma deat
 	replicatesignal(LocalPlayer.ConnectDiedSignalBackend)
 end)
 
+cmd.add({"FreakBypass"}, {"Bugged Out Fixing Soon"}, function()
+	loadstring(game:HttpGet("https://raw.githubusercontent.com/tiwa244/FreakBypass/refs/heads/main/FreakBypasserV1.lua"))()
+
 cmd.add({"instantrespawn", "instantr", "irespawn"}, {"instantrespawn (instantr, irespawn)", "respawn instantly"}, function()
 	if not replicatesignal then
 		return DoNotif("Your executor does not support 'replicatesignal'")
