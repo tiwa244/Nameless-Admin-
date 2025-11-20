@@ -1,5 +1,5 @@
 if getgenv().RealNamelessLoaded~=nil then return end
-pcall(function() getgenv().RealNamelessLoaded=true; getgenv().NATestingVer=false; end)
+pcall(function() getgenv().RealNamelessLoaded=true; getgenv().NATestingVer=false; getgenv().NAverify="TjfkwLM"; end)
 
 NAbegin=tick()
 CMDAUTOFILL = {}
@@ -25,12 +25,17 @@ local Popup  = nil
 
 local TAB_ALL = "All"
 local TAB_GENERAL = "General"
+local TAB_INTEGRATIONS = "Integrations"
 local TAB_INTERFACE = "Interface"
 local TAB_LOGGING = "Logging"
 local TAB_ESP = "ESP"
 local TAB_CHAT = "Chat"
 local TAB_CHARACTER = "Character"
 local TAB_KEYBINDS = "Keybinds"
+local TAB_BASIC_INFO = "Basic Info"
+local TAB_ROBLOX_DATA = "Roblox Data"
+local TAB_ADMIN_INFO = "Admin Info"
+local opt
 
 local LoadstringCommandAliases = {
 	loadstring = true;
@@ -40,7 +45,7 @@ local LoadstringCommandAliases = {
 	execute = true;
 };
 
-local function SafeGetService(name, timeoutSeconds)
+function SafeGetService(name, timeoutSeconds)
 	local Reference = cloneref or function(ref) return ref end
 	local startClock = tick()
 
@@ -130,6 +135,8 @@ local COREGUI=SafeGetService("CoreGui");
 local TextChatService = SafeGetService("TextChatService");
 local TextService = SafeGetService("TextService");
 local StarterGui = SafeGetService("StarterGui");
+local LocalizationService = SafeGetService("LocalizationService");
+local MarketplaceService = SafeGetService("MarketplaceService");
 
 local CustomFunctionSupport = isfile and isfolder and writefile and readfile and listfiles and appendfile;
 local FileSupport = isfile and isfolder and writefile and readfile and makefolder;
@@ -172,6 +179,7 @@ if not originalIO.__captured then
 	originalIO.captureIO('listfiles')
 	originalIO.captureIO('makefolder')
 	originalIO.captureIO('delfile')
+	originalIO.captureIO('delfolder')
 	originalIO.captureIO('isfile')
 	originalIO.captureIO('isfolder')
 end
@@ -297,6 +305,9 @@ if identifyexecutor and (identifyexecutor():lower()=="solara" or identifyexecuto
 		if originalIO.delfile then
 			delfile = wrapWithFallback(originalIO.delfile, false, true)
 		end
+		if originalIO.delfolder then
+			delfolder = wrapWithFallback(originalIO.delfolder, false, true)
+		end
 		if originalIO.isfile then
 			isfile = wrapWithFallback(originalIO.isfile, true, true)
 		end
@@ -309,6 +320,7 @@ end
 local Waypoints = {}
 local Bindings = Bindings or {}
 local NAStuff = {
+	NAICONMAIN = nil;
 	NASCREENGUI = nil; --Getmodel("rbxassetid://140418556029404")
 	NAjson = nil;
 	nuhuhNotifs = true;
@@ -371,6 +383,7 @@ local NAStuff = {
 	Mimic_AnimatePrevDisabled = nil;
 	mimic_uid = 0;
 	ChatSettings = {
+		customEnabled = false;
 		coreGuiChat = true;
 		window = {
 			enabled = true;
@@ -412,6 +425,12 @@ local NAStuff = {
 			tailVisible = true;
 		};
 	};
+	ChatSettingsTemplate = nil;
+	ChatSettingsDefaults = nil;
+	ChatCustomizationActive = nil;
+	ChatSettingsCustomBackup = nil;
+	IconInvisible = false;
+	IconLocked = false;
 	_prefetchedRemotes = {};
 	AutoExecBlockedCommands = {
 		exit = true;
@@ -428,12 +447,198 @@ local NAStuff = {
 	NASettingsSchema = nil;
 	NASettingsData = nil;
 	elementOriginalParent = setmetatable({}, { __mode = "k" });
+	_lastCommand = nil;
+	_prevCommand = nil;
+	_removeAdsLoop = nil;
+	resizeVerticalAsset = nil;
+	resizeHorizontalAsset = nil;
+	resizeDiagonal1Asset = nil;
+	resizeDiagonal2Asset = nil;
 }
 local interactTbl = { click = {}; proxy = {}; touch = {}; }
 local Notification = nil
 local inviteLink = "https://discord.gg/zzjYhtMGFD"
+local prefixCheck = ";"
+opt={
+	prefix=prefixCheck;
+	NAupdDate='unknown'; --month,day,year
+	githubUrl = '';
+	loader='';
+	NAUILOADER='';
+	NAAUTOSCALER=nil;
+	NA_storage=nil;--Stupid Ahh script removing folders
+	NAREQUEST = (syn and syn.request)
+		or (http and http.request)
+		or http_request
+		or request
+		or function() end;
+	queueteleport=(syn and syn.queue_on_teleport) or queue_on_teleport or (fluxus and fluxus.queue_on_teleport) or function() end;
+	hiddenprop=(sethiddenproperty or set_hidden_property or set_hidden_prop) or function() end;
+	ctrlModule = nil;
+	currentTagText = "Tag";
+	currentTagColor = Color3.fromRGB(0, 255, 170);
+	currentTagRGB = false;
+	chatTranslateEnabled = true;
+	chatTranslateTarget = "en";
+	--saveTag = false;
+}
 local cmd={}
 local NAmanage={}
+NAmanage.btCount = 0
+
+NAmanage.btGetExecutorInfo=function(forceRefresh)
+	if forceRefresh or not NAmanage._btExecutorInfo then
+		local execName = "Unknown"
+		local execVersion = "Unknown"
+
+		if type(identifyexecutor) == "function" then
+			local ok, name, version = pcall(identifyexecutor)
+			if ok then
+				if type(name) == "string" and name ~= "" then
+					execName = name
+				elseif name ~= nil then
+					execName = tostring(name)
+				end
+
+				if type(version) == "string" and version ~= "" then
+					execVersion = version
+				elseif version ~= nil then
+					execVersion = tostring(version)
+				end
+			end
+		end
+
+		NAmanage._btExecutorInfo = {
+			name = execName;
+			version = execVersion;
+		}
+	end
+
+	return NAmanage._btExecutorInfo
+end
+
+NAmanage.btEnabled=function()
+	if type(NAmanage._btOverride) == "boolean" then
+		return NAmanage._btOverride
+	end
+	if NAmanage.NASettingsGet then
+		local value = NAmanage.NASettingsGet("bloxtrapRPC")
+		if type(value) == "boolean" then
+			return value
+		end
+	end
+	if NAStuff and typeof(NAStuff.NASettingsData) == "table" then
+		local stored = NAStuff.NASettingsData.bloxtrapRPC
+		if type(stored) == "boolean" then
+			return stored
+		end
+	end
+	return false
+end
+
+NAmanage.btSetEnabled=function(value)
+	NAmanage._btOverride = value == true
+	if NAmanage.NASettingsSet then
+		NAmanage.NASettingsSet("bloxtrapRPC", value == true)
+	end
+end
+
+NAmanage.btSend=function(command, data)
+	if not NAmanage.btEnabled() then
+		return
+	end
+
+	local payload = {
+		command = command;
+		data = data;
+	}
+
+	local ok, encoded = pcall(function()
+		return HttpService:JSONEncode(payload)
+	end)
+
+	if ok and encoded then
+		encoded = encoded:gsub('("assetId"%s*:%s*)([-%d%.eE%+]+)', function(prefix, numeric)
+			local numberValue = tonumber(numeric)
+			if numberValue then
+				return prefix..Format('%.0f', numberValue)
+			end
+			return prefix..numeric
+		end)
+		print("[BloxstrapRPC] "..encoded)
+	end
+end
+
+NAmanage.btUpdate=function(details, state)
+	if not NAmanage.btEnabled() then
+		return
+	end
+
+	local versionHover = (NAStuff and NAStuff.NAjson and NAStuff.NAjson.ver) or "Nameless Admin"
+	local count = NAmanage.btCount or 0
+	local displayDetails = details or adminName or "Nameless Admin"
+	if type(displayDetails) ~= "string" then
+		displayDetails = tostring(displayDetails)
+	end
+	local baseState = state
+
+	if baseState == nil then
+		if count > 0 then
+			baseState = "cmds ran: "..tostring(count)
+		else
+			baseState = "Idle"
+		end
+	end
+	if type(baseState) ~= "string" then
+		baseState = tostring(baseState)
+	end
+
+	local execInfo = NAmanage.btGetExecutorInfo()
+	local execNameLabel = execInfo and execInfo.name or "Unknown"
+	if execNameLabel == "" then
+		execNameLabel = "Unknown"
+	end
+	execNameLabel = tostring(execNameLabel)
+	local execLabel = execNameLabel
+
+	local displayState = Format("%s | Executor: %s", baseState, execLabel)
+
+	local largeAsset = 86994583496114
+	local smallAsset = placeIconAssetId and placeIconAssetId() or nil
+	if smallAsset == 0 then
+		smallAsset = nil
+	end
+	local smallHover = placeName and placeName() or nil
+	if not smallAsset then
+		smallAsset = 13409122839
+		if not smallHover or smallHover == "" or smallHover == "unknown" then
+			smallHover = "v1.0"
+		end
+	end
+
+	NAmanage.btSend("SetRichPresence", {
+		details = displayDetails;
+		state = displayState;
+		largeImage = {
+			assetId = largeAsset;
+			hoverText = tostring(versionHover);
+		};
+		smallImage = smallAsset and {
+			assetId = smallAsset;
+			hoverText = tostring(smallHover or "Game");
+		} or nil;
+	})
+end
+
+NAmanage.btBump=function()
+	NAmanage.btCount = (NAmanage.btCount or 0) + 1
+	NAmanage.btUpdate()
+end
+
+Defer(function()
+	NAmanage.btUpdate()
+end)
+
 NAmanage.resolveTweenDuration=function(scale)
 	local base = tonumber(NAStuff.tweenSpeed) or 1
 	if base <= 0 then
@@ -447,7 +652,7 @@ NAmanage.resolveTweenDuration=function(scale)
 end
 NAmanage._loaderStatus = NAmanage._loaderStatus or {}
 
-local function loaderWarn(label, detail)
+NAmanage.loaderWarn=function(label, detail)
 	warn(Format('[%s loader] %s: %s', adminName, label, detail))
 end
 
@@ -473,7 +678,7 @@ function NAmanage.runLoader(label, callback, opts)
 	local guiTimeout = opts.guiTimeout or 5
 
 	if requireGui and not NAmanage.waitForScreenGui(guiTimeout) then
-		loaderWarn(label, 'aborted: interface not ready')
+		NAmanage.loaderWarn(label, 'aborted: interface not ready')
 		return false
 	end
 
@@ -488,11 +693,11 @@ function NAmanage.runLoader(label, callback, opts)
 		if ok then
 			lastErr = 'callback returned false'
 			if retryOnFalse then
-				loaderWarn(label, Format('attempt %d/%d returned false', attempt, attempts))
+				NAmanage.loaderWarn(label, Format('attempt %d/%d returned false', attempt, attempts))
 			end
 		else
 			lastErr = result
-			loaderWarn(label, Format('attempt %d/%d failed: %s', attempt, attempts, tostring(result)))
+			NAmanage.loaderWarn(label, Format('attempt %d/%d failed: %s', attempt, attempts, tostring(result)))
 		end
 
 		if attempt < attempts then
@@ -520,8 +725,40 @@ function NAmanage.scheduleLoader(label, callback, opts)
 end
 
 local searchIndex = {}
+local cmds
+local defaultBarCommands = { "settings", "commands", "cmdloop", "binders", "discord" }
+local shouldShowDefaultAutofill = false
 local prevVisible, results = {}, {}
 local lastSearchText, gen = "", 0
+
+NAmanage.defaultCommandMatches=function(entry, target)
+	if not (entry and target) then
+		return false
+	end
+	if entry.lowerName == target then
+		return true
+	end
+	if entry.extraAliases then
+		for _, alias in ipairs(entry.extraAliases) do
+			if alias and Lower(alias) == target then
+				return true
+			end
+		end
+	end
+	local baseLower = entry.name and Lower(entry.name) or nil
+	if baseLower then
+		local commandData = cmds.Commands[baseLower]
+		local aliasData = cmds.Aliases[target]
+		if commandData and aliasData and commandData == aliasData then
+			return true
+		end
+		local savedAliasTarget = cmds.NASAVEDALIASES[target]
+		if savedAliasTarget and Lower(savedAliasTarget) == baseLower then
+			return true
+		end
+	end
+	return false
+end
 local NAImageAssets = {
 	Icon = "NAnew.png";
 	sWare = "ScriptWare.png";
@@ -534,8 +771,2833 @@ local NAImageAssets = {
 	lf = "SkyLf.png";
 	rt = "SkyRt.png";
 	up = "SkyUp.png";
+	ResizeVertical = "Vertical16x16.png";
+	ResizeHorizontal = "Horizontal16x16.png";
+	ResizeDiagonal1 = "Diagonal116x16.png";
+	ResizeDiagonal2 = "Diagonal216x16.png";
 }
-local prefixCheck = ";"
+local NAfiles = {
+	NAFILEPATH = "Nameless-Admin";
+	NAWAYPOINTFILEPATH = "Nameless-Admin/Waypoints";
+	NAPLUGINFILEPATH = "Nameless-Admin/Plugins";
+	NAASSETSFILEPATH = "Nameless-Admin/Assets";
+	NAMAINSETTINGSPATH = "Nameless-Admin/Settings.json";
+	NAPREFIXPATH = "Nameless-Admin/Prefix.txt";
+	NABUTTONSIZEPATH = "Nameless-Admin/ButtonSize.txt";
+	NAUISIZEPATH = "Nameless-Admin/UIScale.txt";
+	NAQOTPATH = "Nameless-Admin/QueueOnTeleport.txt";
+	NAALIASPATH = "Nameless-Admin/Aliases.json";
+	NAICONPOSPATH = "Nameless-Admin/IconPosition.json";
+	NAUSERBUTTONSPATH = "Nameless-Admin/UserButtons.json";
+	NAAUTOEXECPATH = "Nameless-Admin/AutoExecCommands.json";
+	NAPREDICTIONPATH = "Nameless-Admin/Prediction.txt";
+	NASTROKETHINGY = "Nameless-Admin/NAUIStroker.txt";
+	NAJOINLEAVE = "Nameless-Admin/JoinLeave.json";
+	NAJOINLEAVELOG = "Nameless-Admin/JoinLeaveLog.txt";
+	NACHATLOGS = "Nameless-Admin/ChatLogs.txt";
+	--NACHATTAG = "Nameless-Admin/ChatTag.json";
+	NATOPBAR = "Nameless-Admin/TopBarApp.txt";
+	NANOTIFSTOGGLE = "Nameless-Admin/NotifsTgl.txt";
+	NABINDERS = "Nameless-Admin/Binders.json";
+	NAESPSETTINGSPATH = "Nameless-Admin/ESPSettings.json";
+	NATOPBARMODE = "Nameless-Admin/TopbarMode.txt";
+	NATEXTCHATSETTINGSPATH = "Nameless-Admin/TextChatSettings.json";
+	NACUSTOMFONTPATH = "Nameless-Admin/CustomFont";
+	NACUSTOMICONPATH = "Nameless-Admin/CustomIcon";
+}
+NAmanage.newCornerStore=function()
+	return {}
+end
+
+NAmanage.initCornerEditor=function(coreGui, HUI)
+	if not (coreGui and NAgui) then
+		return
+	end
+
+	local CE = {
+		path = NAfiles.NAFILEPATH.."/corner_editor.json",
+		default = {
+			enabled = false,
+			radius = 10,
+			targetCoreGui = true,
+			targetPlayerGui = false,
+			targetBillboardGui = false,
+			targetSurfaceGui = false,
+		},
+		cg = coreGui,
+		store = NAmanage.newCornerStore(),
+		watchers = {},
+		restoring = false,
+	}
+
+	local data = {
+		enabled = CE.default.enabled,
+		radius = CE.default.radius,
+		targetCoreGui = CE.default.targetCoreGui,
+		targetPlayerGui = CE.default.targetPlayerGui,
+		targetBillboardGui = CE.default.targetBillboardGui,
+		targetSurfaceGui = CE.default.targetSurfaceGui,
+	}
+	if FileSupport then
+		if not isfile(CE.path) then
+			writefile(CE.path, HttpService:JSONEncode(CE.default))
+		end
+		local okRead, raw = pcall(readfile, CE.path)
+		if okRead and type(raw) == "string" then
+			local okDecode, decoded = pcall(HttpService.JSONDecode, HttpService, raw)
+			if okDecode and type(decoded) == "table" then
+				data.enabled = decoded.enabled == true
+				local parsedRadius = tonumber(decoded.radius)
+				if parsedRadius then
+					data.radius = parsedRadius
+				end
+				if type(decoded.targetCoreGui) == "boolean" then
+					data.targetCoreGui = decoded.targetCoreGui
+				end
+				if type(decoded.targetPlayerGui) == "boolean" then
+					data.targetPlayerGui = decoded.targetPlayerGui
+				end
+				if type(decoded.targetBillboardGui) == "boolean" then
+					data.targetBillboardGui = decoded.targetBillboardGui
+				end
+				if type(decoded.targetSurfaceGui) == "boolean" then
+					data.targetSurfaceGui = decoded.targetSurfaceGui
+				end
+			end
+		end
+	end
+	data.radius = math.clamp(data.radius, 0, 64)
+	CE.data = data
+
+	local function getPlayerGui()
+		local lp = Players and Players.LocalPlayer
+		if not lp then
+			return nil
+		end
+		return lp:FindFirstChildOfClass("PlayerGui") or lp:FindFirstChild("PlayerGui")
+	end
+
+	local function getCRad()
+		return UDim.new(0, math.clamp(tonumber(CE.data.radius) or CE.default.radius, 0, 64))
+	end
+
+	local function isCTgt(o)
+		if not (o and o:IsA("UICorner")) then
+			return false
+		end
+		if HUI and o:IsDescendantOf(HUI) then
+			return false
+		end
+		return true
+	end
+
+	local function getCTgts()
+		local containers = {}
+		if CE.data.targetCoreGui and CE.cg then
+			containers[#containers + 1] = CE.cg
+		end
+		if CE.data.targetPlayerGui then
+			local pg = getPlayerGui()
+			if pg then
+				containers[#containers + 1] = pg
+			end
+		end
+		local world = workspace
+		if CE.data.targetBillboardGui and world and world.GetDescendants then
+			for _, inst in ipairs(world:GetDescendants()) do
+				if inst:IsA("BillboardGui") then
+					containers[#containers + 1] = inst
+				end
+			end
+		end
+		if CE.data.targetSurfaceGui and world and world.GetDescendants then
+			for _, inst in ipairs(world:GetDescendants()) do
+				if inst:IsA("SurfaceGui") then
+					containers[#containers + 1] = inst
+				end
+			end
+		end
+		return containers
+	end
+
+	local function getCBB(o)
+		if not (CE.data.targetBillboardGui and typeof(o) == "Instance") then
+			return nil
+		end
+		if o:IsA("BillboardGui") then
+			return o
+		end
+		local ok, ancestor = pcall(function()
+			return o:FindFirstAncestorOfClass("BillboardGui")
+		end)
+		if ok then
+			return ancestor
+		end
+		return nil
+	end
+
+	local function getCSurf(o)
+		if not (CE.data.targetSurfaceGui and typeof(o) == "Instance") then
+			return nil
+		end
+		if o:IsA("SurfaceGui") then
+			return o
+		end
+		local ok, ancestor = pcall(function()
+			return o:FindFirstAncestorOfClass("SurfaceGui")
+		end)
+		if ok then
+			return ancestor
+		end
+		return nil
+	end
+
+	local function stopCWat(target)
+		local watcher = CE.watchers[target]
+		if not watcher then
+			return
+		end
+		if watcher.change then
+			watcher.change:Disconnect()
+		end
+		if watcher.ancestry then
+			watcher.ancestry:Disconnect()
+		end
+		CE.watchers[target] = nil
+	end
+
+	local function setCWat(target)
+		if not target or CE.watchers[target] then
+			return
+		end
+		local watcher = {}
+		watcher.change = target:GetPropertyChangedSignal("CornerRadius"):Connect(function()
+			if CE.restoring or not CE.data.enabled then
+				return
+			end
+			local desired = getCRad()
+			if target.CornerRadius ~= desired then
+				pcall(function()
+					target.CornerRadius = desired
+				end)
+			end
+		end)
+		watcher.ancestry = target.AncestryChanged:Connect(function(obj)
+			if not obj.Parent then
+				stopCWat(obj)
+				CE.store[obj] = nil
+			end
+		end)
+		CE.watchers[target] = watcher
+	end
+
+	local function setCorner(o)
+		if not isCTgt(o) then
+			return
+		end
+		local info = CE.store[o]
+		if not info then
+			info = { original = o.CornerRadius }
+			CE.store[o] = info
+		end
+		o.CornerRadius = getCRad()
+		setCWat(o)
+	end
+
+	local function resetCorn()
+		CE.restoring = true
+		for corner, info in pairs(CE.store) do
+			if corner and info and info.original then
+				pcall(function()
+					corner.CornerRadius = info.original
+				end)
+			end
+			stopCWat(corner)
+		end
+		CE.restoring = false
+		CE.store = NAmanage.newCornerStore()
+		CE.watchers = {}
+	end
+
+	local function applyCorn()
+		if not CE.data.enabled then
+			return
+		end
+		for _, container in ipairs(getCTgts()) do
+			setCorner(container)
+			local descendants = container:GetDescendants()
+			for i = 1, #descendants do
+				setCorner(descendants[i])
+			end
+		end
+	end
+
+	local function saveCData()
+		if FileSupport then
+			writefile(CE.path, HttpService:JSONEncode(CE.data))
+		end
+	end
+
+	local function onCDesc(o)
+		if CE.data.enabled then
+			setCorner(o)
+		end
+	end
+
+	local function onCBB(o)
+		if not CE.data.enabled then
+			return
+		end
+		local root = getCBB(o)
+		if root then
+			setCorner(root)
+			local kids = root:GetDescendants()
+			for i = 1, #kids do
+				setCorner(kids[i])
+			end
+		end
+	end
+
+	local function onCSurf(o)
+		if not CE.data.enabled then
+			return
+		end
+		local root = getCSurf(o)
+		if root then
+			setCorner(root)
+			local kids = root:GetDescendants()
+			for i = 1, #kids do
+				setCorner(kids[i])
+			end
+		end
+	end
+
+	local function syncCConn()
+		NAlib.disconnect("CornerEditor")
+		if CE.data.targetCoreGui and CE.cg then
+			NAlib.connect("CornerEditor", CE.cg.DescendantAdded:Connect(onCDesc))
+		end
+
+		NAlib.disconnect("CornerEditor_PlayerGui")
+		local pg = CE.data.targetPlayerGui and getPlayerGui()
+		if pg then
+			NAlib.connect("CornerEditor_PlayerGui", pg.DescendantAdded:Connect(onCDesc))
+		end
+
+		local world = workspace
+		NAlib.disconnect("CornerEditor_Billboard")
+		if CE.data.targetBillboardGui and world then
+			NAlib.connect("CornerEditor_Billboard", world.DescendantAdded:Connect(onCBB))
+		end
+
+		NAlib.disconnect("CornerEditor_Surface")
+		if CE.data.targetSurfaceGui and world then
+			NAlib.connect("CornerEditor_Surface", world.DescendantAdded:Connect(onCSurf))
+		end
+	end
+
+	local function monCPGui()
+		local lp = Players and Players.LocalPlayer
+		if not lp then
+			return
+		end
+		NAlib.disconnect("CornerEditor_PlayerGuiAdded")
+		NAlib.connect("CornerEditor_PlayerGuiAdded", lp.ChildAdded:Connect(function(child)
+			if child:IsA("PlayerGui") then
+				syncCConn()
+				if CE.data.enabled then
+					applyCorn()
+				end
+			end
+		end))
+		NAlib.disconnect("CornerEditor_PlayerGuiRemoved")
+		NAlib.connect("CornerEditor_PlayerGuiRemoved", lp.ChildRemoved:Connect(function(child)
+			if child:IsA("PlayerGui") then
+				syncCConn()
+			end
+		end))
+	end
+
+	local function setCTgt(field, value)
+		if CE.data[field] == value then
+			return
+		end
+		CE.data[field] = value
+		saveCData()
+		syncCConn()
+		if CE.data.enabled then
+			resetCorn()
+			applyCorn()
+		end
+	end
+
+	syncCConn()
+	monCPGui()
+	if CE.data.enabled then
+		applyCorn()
+	end
+
+	local FontEditor
+	local persistFontData
+	local persistFontData
+
+	local function newFontStore()
+		return {}
+	end
+
+	local FontChoices = {}
+	local CustomFontChoices = {}
+	local FontChoiceIndex = {}
+	local FontExts = {
+		[".ttf"] = true,
+		[".otf"] = true,
+		[".ttc"] = true,
+		[".otc"] = true,
+		[".woff"] = true,
+		[".woff2"] = true,
+		[".fon"] = true,
+		[".fnt"] = true,
+		[".pfb"] = true,
+		[".pfa"] = true,
+		[".dfont"] = true,
+		[".eot"] = true,
+	}
+	local NAFontSrc = {
+		list = "https://api.github.com/repos/ltseverydayyou/uuuuuuu/contents/NAfonts?ref=main",
+		raw = "https://raw.githubusercontent.com/ltseverydayyou/uuuuuuu/main/NAfonts/",
+	}
+
+	local function clearFontChoices()
+		FontChoices = {}
+		CustomFontChoices = {}
+		FontChoiceIndex = {}
+	end
+
+	local function addFontChoice(choice)
+		if not choice or not choice.key then
+			return
+		end
+		FontChoices[#FontChoices + 1] = choice
+		FontChoiceIndex[choice.key] = choice
+		if choice.kind == "custom" then
+			CustomFontChoices[#CustomFontChoices + 1] = choice
+		end
+	end
+
+	local function enforceCustomCycleAvailability()
+		if FontEditor.data.useCustomCycle and #CustomFontChoices == 0 then
+			FontEditor.data.useCustomCycle = false
+			persistFontData()
+		end
+	end
+
+	local function getActiveFontChoices()
+		if FontEditor.data.useCustomCycle and #CustomFontChoices > 0 then
+			return CustomFontChoices
+		end
+		return FontChoices
+	end
+
+	local function ensureCustomFontFolder()
+		if not FileSupport then
+			return false, "File support is required for custom fonts."
+		end
+		if type(FontEditor.customDir) ~= "string" or FontEditor.customDir == "" then
+			return false, "Custom font directory is not configured."
+		end
+		if type(isfolder) == "function" then
+			local exists = false
+			local ok, res = pcall(isfolder, FontEditor.customDir)
+			if ok then
+				exists = res
+			end
+			if not exists then
+				if type(makefolder) ~= "function" then
+					return false, "\"makefolder\" is required for custom fonts."
+				end
+				local okMk, err = pcall(makefolder, FontEditor.customDir)
+				if not okMk then
+					return false, err or "Unable to create custom font directory."
+				end
+			end
+		end
+		return true
+	end
+
+	local function getCustomFontCount()
+		return type(FontEditor.customFonts) == "table" and #FontEditor.customFonts or 0
+	end
+
+	local function hasCustomFonts()
+		return getCustomFontCount() > 0
+	end
+
+	local function formatCustomFontStatus()
+		local count = getCustomFontCount()
+		if count == 0 then
+			return "No custom fonts installed"
+		end
+		if count == 1 then
+			return "1 custom font installed"
+		end
+		return string.format("%d custom fonts installed", count)
+	end
+
+	local function preprocessFontUrl(url)
+		if type(url) ~= "string" then
+			return nil
+		end
+		local trimmed = url:match("^%s*(.-)%s*$") or ""
+		if trimmed == "" then
+			return nil
+		end
+		trimmed = trimmed:gsub(" ", "%%20")
+		local qPos = trimmed:find("%?")
+		local base = qPos and trimmed:sub(1, qPos - 1) or trimmed
+		return trimmed, base
+	end
+
+	local function normalizeGitHubPath(path)
+		if type(path) ~= "string" then
+			return ""
+		end
+		local cleaned = path:gsub("^/+", "")
+		cleaned = cleaned:gsub("/+$", "")
+		return cleaned
+	end
+
+	local function encodeGitHubPath(path)
+		local normalized = normalizeGitHubPath(path or "")
+		if normalized == "" then
+			return ""
+		end
+		local segments = {}
+		for segment in normalized:gmatch("[^/]+") do
+			segments[#segments + 1] = HttpService:UrlEncode(segment)
+		end
+		return table.concat(segments, "/")
+	end
+
+	local function parseGitHubFolderUrl(baseUrl, originalUrl)
+		if type(baseUrl) ~= "string" or baseUrl == "" then
+			return nil
+		end
+		local owner, repo, kind, rest = baseUrl:match("^https?://github.com/([^/]+)/([^/]+)/([^/]+)/?(.*)$")
+		if owner and repo and kind then
+			if kind == "tree" then
+				local sanitizedRest = rest or ""
+				if sanitizedRest:sub(1, 11) == "refs/heads/" then
+					sanitizedRest = sanitizedRest:sub(12)
+				elseif sanitizedRest:sub(1, 10) == "refs/tags/" then
+					sanitizedRest = sanitizedRest:sub(11)
+				end
+				local branch, path = sanitizedRest:match("^([^/]+)/(.*)$")
+				if not branch then
+					branch = sanitizedRest ~= "" and sanitizedRest or "main"
+					path = ""
+				end
+				branch = branch:gsub("%%2[Ff]", "/")
+				path = (path and path:gsub("%%2[Ff]", "/")) or ""
+				return {
+					owner = owner,
+					repo = repo,
+					branch = branch,
+					path = normalizeGitHubPath(path),
+					originalUrl = originalUrl or baseUrl,
+				}
+			end
+			return nil
+		end
+		local ownerOnly, repoOnly = baseUrl:match("^https?://github.com/([^/]+)/([^/?#]+)$")
+		if ownerOnly and repoOnly then
+			return {
+				owner = ownerOnly,
+				repo = repoOnly:gsub("%.git$", ""),
+				branch = "main",
+				path = "",
+				originalUrl = originalUrl or baseUrl,
+			}
+		end
+		return nil
+	end
+
+	local GitHubFolderLimits = {
+		depth = 4,
+		total = 40,
+	}
+
+	local function fetchGitHubFolderContents(info, relativePath)
+		if type(info) ~= "table" or type(info.owner) ~= "string" or type(info.repo) ~= "string" then
+			return false, "Invalid GitHub folder reference."
+		end
+		local branch = info.branch ~= "" and info.branch or "main"
+		local baseUrl = string.format("https://api.github.com/repos/%s/%s/contents", info.owner, info.repo)
+		local encodedPath = encodeGitHubPath(relativePath or "")
+		if encodedPath ~= "" then
+			baseUrl = baseUrl.."/"..encodedPath
+		end
+		baseUrl = baseUrl.."?ref="..HttpService:UrlEncode(branch)
+		local ok, raw = pcall(function()
+			return game:HttpGet(baseUrl)
+		end)
+		if not (ok and type(raw) == "string" and raw ~= "") then
+			return false, raw or "Unable to fetch GitHub folder contents."
+		end
+		local okDecode, decoded = pcall(HttpService.JSONDecode, HttpService, raw)
+		if not (okDecode and type(decoded) == "table") then
+			return false, "Invalid GitHub folder response."
+		end
+		if type(decoded.message) == "string" and decoded.message ~= "" then
+			return false, decoded.message
+		end
+		return true, decoded
+	end
+
+	local function normalizeCustomFontUrl(url)
+		local trimmed, noQuery = preprocessFontUrl(url)
+		if not trimmed then
+			return nil
+		end
+		local owner, repo, kind, rest = noQuery:match("^https?://github.com/([^/]+)/([^/]+)/([^/]+)/(.+)$")
+		if owner and repo and kind and rest then
+			local sanitizedRest = rest
+			if sanitizedRest:sub(1, 11) == "refs/heads/" then
+				sanitizedRest = sanitizedRest:sub(12)
+			elseif sanitizedRest:sub(1, 10) == "refs/tags/" then
+				sanitizedRest = sanitizedRest:sub(11)
+			end
+			local branch, path = sanitizedRest:match("^([^/]+)/(.+)$")
+			if branch and path then
+				branch = branch:gsub("%%2[Ff]", "/")
+				path = path:gsub("%%2[Ff]", "/")
+				if kind == "blob" or kind == "raw" then
+					return string.format("https://raw.githubusercontent.com/%s/%s/%s/%s", owner, repo, branch, path)
+				end
+			end
+		end
+		local directRaw = noQuery:match("^https?://raw%.githubusercontent%.com/.+")
+		if directRaw then
+			return trimmed
+		end
+		return trimmed
+	end
+
+	local function sanitizeFileName(name)
+		if type(name) ~= "string" then
+			return nil
+		end
+		local trimmed = name:match("^%s*(.-)%s*$") or ""
+		local sanitized = trimmed:gsub("[^%w%._%-]", "_")
+		sanitized = sanitized:gsub("_+", "_")
+		sanitized = sanitized:gsub("^_+", "")
+		sanitized = sanitized:gsub("_+$", "")
+		if sanitized == "" then
+			return nil
+		end
+		return sanitized
+	end
+
+	local function sanitizeId(name)
+		if type(name) ~= "string" then
+			return nil
+		end
+		local lowered = name:lower()
+		local sanitized = lowered:gsub("[^%w]+", "_")
+		sanitized = sanitized:gsub("_+", "_")
+		sanitized = sanitized:gsub("^_+", "")
+		sanitized = sanitized:gsub("_+$", "")
+		if sanitized == "" then
+			return nil
+		end
+		return sanitized
+	end
+
+	local function getFName(path)
+		if type(path) ~= "string" then
+			return nil
+		end
+		local normalized = path:gsub("\\", "/")
+		return normalized:match("([^/]+)$")
+	end
+
+	local function isFontExt(name)
+		if type(name) ~= "string" or name == "" then
+			return false
+		end
+		local ext = name:match("%.[^%.]+$")
+		return ext and FontExts[ext:lower()] == true
+	end
+
+	local function collectGitHubFontFiles(info)
+		if type(info) ~= "table" then
+			return false, "Invalid GitHub folder reference."
+		end
+		local fonts = {}
+		local visited = {}
+		local function visitKey(path)
+			return (path and path ~= "") and path or "/"
+		end
+		local function scan(path, depth)
+			depth = depth or 0
+			if depth > GitHubFolderLimits.depth then
+				return true
+			end
+			if #fonts >= GitHubFolderLimits.total then
+				return true
+			end
+			local okFetch, payload = fetchGitHubFolderContents(info, path or "")
+			if not okFetch then
+				return false, payload
+			end
+			local entries = {}
+			if payload.type == "file" then
+				entries[1] = payload
+			elseif #payload > 0 then
+				for _, entry in ipairs(payload) do
+					entries[#entries + 1] = entry
+				end
+			else
+				return true
+			end
+			for _, entry in ipairs(entries) do
+				if type(entry) == "table" then
+					if entry.type == "file" then
+						if entry.name and isFontExt(entry.name) and entry.download_url then
+							fonts[#fonts + 1] = {
+								name = entry.name,
+								label = entry.name:gsub("%.[^%.]+$", ""),
+								url = entry.download_url,
+							}
+							if #fonts >= GitHubFolderLimits.total then
+								break
+							end
+						end
+					elseif entry.type == "dir" and entry.path then
+						local key = visitKey(entry.path)
+						if not visited[key] then
+							visited[key] = true
+							local okChild, errChild = scan(entry.path, depth + 1)
+							if not okChild then
+								return false, errChild
+							end
+							if #fonts >= GitHubFolderLimits.total then
+								break
+							end
+						end
+					end
+				end
+			end
+			return true
+		end
+		local startPath = normalizeGitHubPath(info.path or "")
+		visited[visitKey(startPath)] = true
+		local okScan, errScan = scan(startPath, 0)
+		if not okScan then
+			return false, errScan
+		end
+		return true, fonts
+	end
+
+	local IconExts = {
+		[".png"] = true,
+		[".jpg"] = true,
+		[".jpeg"] = true,
+		[".webp"] = true,
+		[".bmp"] = true,
+	}
+
+	local function isIconExt(name)
+		if type(name) ~= "string" or name == "" then
+			return false
+		end
+		local ext = name:match("%.[^%.]+$")
+		return ext and IconExts[ext:lower()] == true
+	end
+
+	local function collectGitHubIconFiles(info)
+		if type(info) ~= "table" then
+			return false, "Invalid GitHub folder reference."
+		end
+		local icons = {}
+		local visited = {}
+		local function key(path)
+			return (path and path ~= "") and path or "/"
+		end
+		local function scan(path, depth)
+			depth = depth or 0
+			if depth > GitHubFolderLimits.depth then
+				return true
+			end
+			if #icons >= GitHubFolderLimits.total then
+				return true
+			end
+			local okFetch, payload = fetchGitHubFolderContents(info, path or "")
+			if not okFetch then
+				return false, payload
+			end
+			local entries = {}
+			if payload.type == "file" then
+				entries[1] = payload
+			elseif #payload > 0 then
+				for _, e in ipairs(payload) do
+					entries[#entries + 1] = e
+				end
+			else
+				return true
+			end
+			for _, e in ipairs(entries) do
+				if type(e) == "table" then
+					if e.type == "file" then
+						if e.name and isIconExt(e.name) and e.download_url then
+							icons[#icons + 1] = {
+								name = e.name,
+								url = e.download_url,
+							}
+							if #icons >= GitHubFolderLimits.total then
+								break
+							end
+						end
+					elseif e.type == "dir" and e.path then
+						local k = key(e.path)
+						if not visited[k] then
+							visited[k] = true
+							local okChild, errChild = scan(e.path, depth + 1)
+							if not okChild then
+								return false, errChild
+							end
+							if #icons >= GitHubFolderLimits.total then
+								break
+							end
+						end
+					end
+				end
+			end
+			return true
+		end
+		local startPath = normalizeGitHubPath(info.path or "")
+		visited[key(startPath)] = true
+		local okScan, errScan = scan(startPath, 0)
+		if not okScan then
+			return false, errScan
+		end
+		return true, icons
+	end
+
+	NAgui.installIconsFromGitHubFolder = function(info)
+		if not NAgui.iconFsOk() then
+			return false, "Custom icons require file support and getcustomasset."
+		end
+		if not NAgui.ensureIconFolder() then
+			return false, "Unable to prepare CustomIcon folder."
+		end
+		local okList, list = collectGitHubIconFiles(info)
+		if not okList then
+			return false, list
+		end
+		if #list == 0 then
+			return false, "No image files were found in that folder."
+		end
+		local count = 0
+		local lastAsset
+		local lastErr
+		for _, ico in ipairs(list) do
+			local okSave, asset = NAgui.iconSaveFromUrl(ico.url)
+			if okSave and typeof(asset) == "string" then
+				count += 1
+				lastAsset = asset
+			else
+				lastErr = asset
+			end
+		end
+		if count == 0 then
+			return false, lastErr or "Unable to download icons from that folder."
+		end
+		return true, {
+			count = count,
+			asset = lastAsset,
+			source = info.originalUrl,
+		}
+	end
+
+	local function uniqFontId(base)
+		local clean = base
+		if not clean or clean == "" then
+			clean = "font_"..tostring(os.time())
+		end
+		local id = clean
+		local idx = 1
+		while FontEditor.customFontMap and FontEditor.customFontMap[id] do
+			idx += 1
+			id = string.format("%s_%d", clean, idx)
+		end
+		return id
+	end
+
+	local function saveCustomFontManifest()
+		if not FileSupport then
+			return
+		end
+		if type(writefile) ~= "function" then
+			return
+		end
+		local payload = { fonts = FontEditor.customFonts }
+		pcall(writefile, FontEditor.customManifest, HttpService:JSONEncode(payload))
+	end
+
+	local function customFontFileExists(fileName)
+		if type(fileName) ~= "string" or fileName == "" then
+			return false
+		end
+		if type(FontEditor) ~= "table" or type(FontEditor.customDir) ~= "string" then
+			return false
+		end
+		if type(isfile) ~= "function" then
+			return false
+		end
+		local ok, exists = pcall(isfile, FontEditor.customDir.."/"..fileName)
+		return ok and exists
+	end
+
+	local function deleteCustomFontFile(fileName)
+		if not (type(fileName) == "string" and fileName ~= "") then
+			return
+		end
+		if type(FontEditor) ~= "table" or type(FontEditor.customDir) ~= "string" then
+			return
+		end
+		if type(isfile) ~= "function" or type(delfile) ~= "function" then
+			return
+		end
+		local fullPath = FontEditor.customDir.."/"..fileName
+		local okExists, exists = pcall(isfile, fullPath)
+		if okExists and exists then
+			pcall(delfile, fullPath)
+		end
+	end
+
+	local function removeCustomFontEntry(entry, opts)
+		if not (entry and entry.id) then
+			return
+		end
+		opts = opts or {}
+		local id = entry.id
+		if opts.deleteFiles then
+			if entry.file then
+				deleteCustomFontFile(entry.file)
+			end
+			if entry.familyFile then
+				deleteCustomFontFile(entry.familyFile)
+			end
+		end
+		for i = #FontEditor.customFonts, 1, -1 do
+			local item = FontEditor.customFonts[i]
+			if item and item.id == id then
+				table.remove(FontEditor.customFonts, i)
+				break
+			end
+		end
+		FontEditor.customFontMap[id] = nil
+		if not opts.skipSave then
+			saveCustomFontManifest()
+		end
+		if FontEditor.refreshCustomFontUI then
+			FontEditor.refreshCustomFontUI()
+		end
+	end
+
+	local function removeAllCustomFonts()
+		if type(FontEditor.customFonts) ~= "table" or #FontEditor.customFonts == 0 then
+			return
+		end
+		local entries = {}
+		for _, entry in ipairs(FontEditor.customFonts) do
+			entries[#entries + 1] = entry
+		end
+		for _, entry in ipairs(entries) do
+			removeCustomFontEntry(entry, { deleteFiles = true, skipSave = true })
+		end
+		FontEditor.customFonts = {}
+		FontEditor.customFontMap = {}
+		saveCustomFontManifest()
+		rebuildFontChoices()
+		enforceCustomCycleAvailability()
+		if FontEditor.refreshCustomFontUI then
+			FontEditor.refreshCustomFontUI()
+		end
+	end
+
+	local function scanFonts()
+		if not (FileSupport and listfiles) then
+			return false
+		end
+		if type(FontEditor.customDir) ~= "string" or FontEditor.customDir == "" then
+			return false
+		end
+		if type(FontEditor.customFonts) ~= "table" or type(FontEditor.customFontMap) ~= "table" then
+			return false
+		end
+		local okFolder = ensureCustomFontFolder()
+		if not okFolder then
+			return false
+		end
+		local okList, items = pcall(listfiles, FontEditor.customDir)
+		if not (okList and type(items) == "table") then
+			return false
+		end
+		local known = {}
+		for _, entry in ipairs(FontEditor.customFonts) do
+			if entry.file then
+				known[entry.file:lower()] = true
+			end
+		end
+		local added = false
+		for _, fullPath in ipairs(items) do
+			local name = getFName(fullPath)
+			if name and isFontExt(name) then
+				local lower = name:lower()
+				if not known[lower] then
+					local base = name:gsub("%.[^%.]+$", "")
+					local id = uniqFontId(sanitizeId(base) or sanitizeId(name))
+					local label = base ~= "" and base or id
+					local entry = {
+						id = id,
+						name = label,
+						displayName = label,
+						file = name,
+						url = nil,
+					}
+					FontEditor.customFonts[#FontEditor.customFonts + 1] = entry
+					FontEditor.customFontMap[id] = entry
+					known[lower] = true
+					added = true
+				end
+			end
+		end
+		if added then
+			saveCustomFontManifest()
+		end
+		return added
+	end
+
+	local function loadCustomFontManifest()
+		FontEditor.customFonts = {}
+		FontEditor.customFontMap = {}
+		if not FileSupport then
+			return
+		end
+		local okFolder = ensureCustomFontFolder()
+		if not okFolder then
+			return
+		end
+		if type(isfile) ~= "function" or type(readfile) ~= "function" then
+			return
+		end
+		if not isfile(FontEditor.customManifest) then
+			return
+		end
+		local ok, raw = pcall(readfile, FontEditor.customManifest)
+		if not (ok and type(raw) == "string" and raw ~= "") then
+			return
+		end
+		local okDecode, decoded = pcall(HttpService.JSONDecode, HttpService, raw)
+		if not (okDecode and type(decoded) == "table") then
+			return
+		end
+		local items = decoded.fonts or decoded
+		if type(items) ~= "table" then
+			return
+		end
+		local manifestDirty = false
+		local validFonts = {}
+		local validMap = {}
+		for _, entry in ipairs(items) do
+			if type(entry) == "table" and type(entry.file) == "string" then
+				entry.id = entry.id or sanitizeId(entry.name or entry.file) or HttpService:GenerateGUID(false)
+				entry.name = entry.name or entry.id
+				entry.displayName = entry.displayName or entry.name
+				entry.url = normalizeCustomFontUrl(entry.url) or entry.url
+				entry.familyFile = entry.familyFile
+				if not customFontFileExists(entry.file) then
+					if entry.familyFile then
+						deleteCustomFontFile(entry.familyFile)
+					end
+					manifestDirty = true
+				elseif validMap[entry.id] then
+					manifestDirty = true
+				else
+					validFonts[#validFonts + 1] = entry
+					validMap[entry.id] = entry
+				end
+			else
+				manifestDirty = true
+			end
+		end
+		FontEditor.customFonts = validFonts
+		FontEditor.customFontMap = validMap
+		if manifestDirty then
+			saveCustomFontManifest()
+		end
+	end
+
+	local function rebuildFontChoices()
+		clearFontChoices()
+		for _, enumFont in ipairs(Enum.Font:GetEnumItems()) do
+			addFontChoice({
+				key = "enum:"..enumFont.Name,
+				label = enumFont.Name,
+				kind = "enum",
+				enum = enumFont,
+			})
+		end
+		for _, entry in ipairs(FontEditor.customFonts) do
+			if type(entry.id) == "string" and type(entry.file) == "string" then
+				local label = entry.displayName or entry.name or entry.id
+				addFontChoice({
+					key = "custom:"..entry.id,
+					label = "[Custom] "..label,
+					kind = "custom",
+					entry = entry,
+				})
+			end
+		end
+		enforceCustomCycleAvailability()
+	end
+
+	local function getFontChoice(fontKey)
+		if type(fontKey) ~= "string" or fontKey == "" then
+			return nil
+		end
+		local choice = FontChoiceIndex[fontKey]
+		if choice then
+			return choice
+		end
+		if not fontKey:find(":", 1, true) then
+			local enumCandidate = Enum.Font[fontKey]
+			if enumCandidate then
+				return FontChoiceIndex["enum:"..fontKey]
+			end
+		end
+		return nil
+	end
+
+	local function normalizeFontKey(fontKey)
+		if type(fontKey) ~= "string" or fontKey == "" then
+			return FontEditor.default.fontKey
+		end
+		if FontChoiceIndex[fontKey] then
+			return fontKey
+		end
+		if not fontKey:find(":", 1, true) then
+			local enumCandidate = Enum.Font[fontKey]
+			if enumCandidate then
+				return "enum:"..fontKey
+			end
+		end
+		return FontEditor.default.fontKey
+	end
+
+	local function getCustomFontAsset(entry)
+		if type(entry) ~= "table" or type(entry.file) ~= "string" then
+			return nil, "Invalid custom font entry."
+		end
+		if type(getcustomasset) ~= "function" then
+			return nil, "Custom fonts require getcustomasset support."
+		end
+		if not FileSupport or type(writefile) ~= "function" then
+			return nil, "File support is required for custom fonts."
+		end
+		if not customFontFileExists(entry.file) then
+			removeCustomFontEntry(entry)
+			rebuildFontChoices()
+			enforceCustomCycleAvailability()
+			return nil, "Custom font file is missing."
+		end
+		local fullPath = FontEditor.customDir.."/"..entry.file
+		local okAsset, assetId = pcall(getcustomasset, fullPath)
+		if not (okAsset and type(assetId) == "string") then
+			return nil, "Unable to load custom font file."
+		end
+		local familyFile = entry.familyFile or (entry.id.."_family.json")
+		local familyPath = FontEditor.customDir.."/"..familyFile
+		if entry.familyFile and entry.familyFile ~= familyFile then
+			deleteCustomFontFile(entry.familyFile)
+		end
+		local needsPersist = entry.familyFile ~= familyFile
+		entry.familyFile = familyFile
+		local familyData = {
+			family = entry.displayName or entry.name or entry.id,
+			faces = {
+				{
+					assetId = assetId,
+					weight = "Regular",
+					style = "Normal",
+				},
+			},
+		}
+		local okWrite, errWrite = pcall(writefile, familyPath, HttpService:JSONEncode(familyData))
+		if not okWrite then
+			return nil, errWrite or "Unable to create font family data."
+		end
+		local okFamilyAsset, familyAssetId = pcall(getcustomasset, familyPath)
+		if not (okFamilyAsset and type(familyAssetId) == "string") then
+			return nil, "Unable to load custom font family."
+		end
+		if needsPersist then
+			saveCustomFontManifest()
+		end
+		local okFont, fontFace = pcall(Font.new, familyAssetId, Enum.FontWeight.Regular, Enum.FontStyle.Normal)
+		if okFont and typeof(fontFace) == "Font" then
+			return fontFace
+		end
+		return nil, "Invalid font file."
+	end
+
+	local function deriveFileNameFromUrl(url)
+		if type(url) ~= "string" then
+			return nil
+		end
+		local candidate = url:match("/([^/%?]+)$")
+		return candidate
+	end
+
+	local function installFontFromUrl(name, url, opts)
+		opts = opts or {}
+		local rawName = type(name) == "string" and (name:match("^%s*(.-)%s*$") or "") or ""
+		local httpOk, data = pcall(function()
+			return game:HttpGet(url)
+		end)
+		if not (httpOk and type(data) == "string" and data ~= "") then
+			return false, "Unable to download font file."
+		end
+		local remoteFile = opts.remoteFileName or deriveFileNameFromUrl(url)
+		local sanitizedRemote = sanitizeFileName(remoteFile or rawName)
+		if not sanitizedRemote then
+			sanitizedRemote = "font_"..tostring(os.time())..".otf"
+		end
+		local ext = sanitizedRemote:match("%.[^%.]+$") or ".otf"
+		local idSource = rawName ~= "" and rawName or sanitizedRemote:gsub("%.[^%.]+$", "")
+		local id = sanitizeId(idSource) or sanitizeId(HttpService:GenerateGUID(false)) or tostring(os.time())
+		local fileName = id..ext
+		local fullPath = FontEditor.customDir.."/"..fileName
+		local okWrite, errWrite = pcall(writefile, fullPath, data)
+		if not okWrite then
+			return false, errWrite or "Unable to save custom font file."
+		end
+		local entry = FontEditor.customFontMap[id]
+		if entry then
+			entry.file = fileName
+			entry.url = url
+			if rawName ~= "" then
+				entry.name = rawName
+				entry.displayName = rawName
+			end
+		else
+			local display = rawName ~= "" and rawName or sanitizedRemote:gsub("%.[^%.]+$", "")
+			entry = {
+				id = id,
+				name = display,
+				displayName = display,
+				file = fileName,
+				url = url,
+			}
+			FontEditor.customFontMap[id] = entry
+			FontEditor.customFonts[#FontEditor.customFonts + 1] = entry
+		end
+		if not opts.deferSave then
+			saveCustomFontManifest()
+			rebuildFontChoices()
+		end
+		return true, entry
+	end
+
+	local function installFontsFromGitHubFolder(name, folderInfo)
+		local okFonts, fontList = collectGitHubFontFiles(folderInfo)
+		if not okFonts then
+			return false, fontList
+		end
+		if #fontList == 0 then
+			return false, "No font files were found in that folder."
+		end
+		local baseName = type(name) == "string" and (name:match("^%s*(.-)%s*$") or "") or ""
+		local installed = {}
+		local lastErr = nil
+		for _, font in ipairs(fontList) do
+			local label = font.label
+			if baseName ~= "" then
+				label = baseName.." - "..font.label
+			end
+			local okInstall, result = installFontFromUrl(label, font.url, {
+				remoteFileName = font.name,
+				deferSave = true,
+			})
+			if okInstall then
+				installed[#installed + 1] = result
+			else
+				lastErr = result
+			end
+		end
+		if #installed == 0 then
+			return false, lastErr or "Unable to install fonts from that folder."
+		end
+		saveCustomFontManifest()
+		rebuildFontChoices()
+		return true, {
+			multi = true,
+			entries = installed,
+			count = #installed,
+			source = folderInfo.originalUrl,
+		}
+	end
+
+	local function addOrUpdateCustomFont(name, url, opts)
+		opts = opts or {}
+		if not FileSupport then
+			return false, "File support is required for custom fonts."
+		end
+		if type(writefile) ~= "function" then
+			return false, "writefile is required for custom fonts."
+		end
+		if type(url) ~= "string" or url == "" then
+			return false, "A font URL is required."
+		end
+		local trimmed, baseUrl = preprocessFontUrl(url)
+		if not trimmed then
+			return false, "A font URL is required."
+		end
+		local okFolder, folderErr = ensureCustomFontFolder()
+		if not okFolder then
+			return false, folderErr
+		end
+		if not opts.skipFolderScan then
+			local folderInfo = parseGitHubFolderUrl(baseUrl, trimmed)
+			if folderInfo then
+				folderInfo.path = folderInfo.path or ""
+				return installFontsFromGitHubFolder(name, folderInfo)
+			end
+		end
+		local normalizedUrl = normalizeCustomFontUrl(trimmed)
+		if not normalizedUrl then
+			return false, "Invalid font URL."
+		end
+		return installFontFromUrl(name, normalizedUrl, opts)
+	end
+
+	local function getNAList()
+		local ok, raw = pcall(function()
+			return game:HttpGet(NAFontSrc.list)
+		end)
+		if not (ok and type(raw) == "string" and raw ~= "") then
+			return false, "Unable to fetch NA font catalog."
+		end
+		local okDecode, decoded = pcall(HttpService.JSONDecode, HttpService, raw)
+		if not (okDecode and type(decoded) == "table") then
+			return false, "Invalid NA font catalog."
+		end
+		local items = {}
+		if #decoded > 0 then
+			for _, entry in ipairs(decoded) do
+				items[#items + 1] = entry
+			end
+		else
+			for _, entry in pairs(decoded) do
+				if type(entry) == "table" then
+					items[#items + 1] = entry
+				end
+			end
+		end
+		local fonts = {}
+		for _, entry in ipairs(items) do
+			if type(entry) == "table" and type(entry.name) == "string" then
+				if isFontExt(entry.name) then
+					fonts[#fonts + 1] = {
+						name = entry.name,
+						label = entry.name:gsub("%.[^%.]+$", ""),
+						url = NAFontSrc.raw..entry.name,
+					}
+				end
+			end
+		end
+		if #fonts == 0 then
+			return false, "No preset fonts available."
+		end
+		return true, fonts
+	end
+
+	local function dlNAFonts()
+		if not FileSupport then
+			return false, "Custom fonts require file support."
+		end
+		local okFolder, folderErr = ensureCustomFontFolder()
+		if not okFolder then
+			return false, folderErr
+		end
+		local okList, fonts = getNAList()
+		if not okList then
+			return false, fonts
+		end
+		local count = 0
+		local lastErr = nil
+		for _, font in ipairs(fonts) do
+			local label = font.label ~= "" and font.label or font.name
+			local okInstall, res = addOrUpdateCustomFont(label, font.url)
+			if okInstall then
+				count += 1
+			else
+				lastErr = res or ("Unable to install "..label)
+			end
+		end
+		if count == 0 then
+			return false, lastErr or "No preset fonts installed."
+		end
+		return true, count
+	end
+
+	FontEditor = {
+		path = NAfiles.NAFILEPATH.."/font_override.json",
+		default = {
+			enabled = false,
+			font = "Gotham",
+			fontKey = "enum:Gotham",
+			targetCoreGui = true,
+			targetPlayerGui = false,
+			targetBillboardGui = false,
+			targetSurfaceGui = false,
+			useCustomCycle = false,
+		},
+		cg = CoreGui,
+		store = newFontStore(),
+		data = {
+			enabled = false,
+			font = "Gotham",
+			fontKey = "enum:Gotham",
+			targetCoreGui = true,
+			targetPlayerGui = false,
+			targetBillboardGui = false,
+			targetSurfaceGui = false,
+			useCustomCycle = false,
+		},
+		currentFont = Enum.Font.Gotham,
+		currentFontIsCustom = false,
+		customDir = NAfiles.NACUSTOMFONTPATH,
+		customManifest = NAfiles.NACUSTOMFONTPATH.."/fonts.json",
+		customFonts = {},
+		customFontMap = {},
+		customInputs = { name = "", url = "" },
+		refreshCustomFontUI = nil,
+		watchers = {},
+		restoring = false,
+		dlBusy = false,
+	}
+
+	local function disconnectFontWatcher(target)
+		local watcher = FontEditor.watchers[target]
+		if not watcher then
+			return
+		end
+		if watcher.change then
+			watcher.change:Disconnect()
+		end
+		if watcher.ancestry then
+			watcher.ancestry:Disconnect()
+		end
+		FontEditor.watchers[target] = nil
+	end
+
+	local function ensureFontWatcher(target)
+		if not target or FontEditor.watchers[target] then
+			return
+		end
+		local watcher = {}
+		watcher.change = target:GetPropertyChangedSignal("FontFace"):Connect(function()
+			if FontEditor.restoring then
+				return
+			end
+			if not FontEditor.data.enabled then
+				return
+			end
+			if FontEditor.currentFontIsCustom then
+				local currentFace = NAlib.isProperty(target, "FontFace")
+				if currentFace ~= FontEditor.currentFont then
+					pcall(function()
+						target.FontFace = FontEditor.currentFont
+						target.Font = Enum.Font.Unknown
+					end)
+				end
+			end
+		end)
+		watcher.ancestry = target.AncestryChanged:Connect(function(obj)
+			if not obj.Parent then
+				disconnectFontWatcher(obj)
+				FontEditor.store[obj] = nil
+			end
+		end)
+		FontEditor.watchers[target] = watcher
+	end
+
+	persistFontData = function()
+		if not FileSupport then
+			return
+		end
+		pcall(writefile, FontEditor.path, HttpService:JSONEncode({
+			enabled = FontEditor.data.enabled,
+			font = FontEditor.data.fontKey or FontEditor.default.fontKey,
+			fontLabel = FontEditor.data.font,
+			targetCoreGui = FontEditor.data.targetCoreGui,
+			targetPlayerGui = FontEditor.data.targetPlayerGui,
+			targetBillboardGui = FontEditor.data.targetBillboardGui,
+			targetSurfaceGui = FontEditor.data.targetSurfaceGui,
+			useCustomCycle = FontEditor.data.useCustomCycle,
+		}))
+	end
+
+	local function loadFontData()
+		local stored = FontEditor.default
+		if FileSupport then
+			if not isfile(FontEditor.path) then
+				writefile(FontEditor.path, HttpService:JSONEncode(FontEditor.default))
+			end
+			local ok, raw = pcall(readfile, FontEditor.path)
+			if ok and type(raw) == "string" then
+				local okDecode, decoded = pcall(HttpService.JSONDecode, HttpService, raw)
+				if okDecode and type(decoded) == "table" then
+					stored = decoded
+				end
+			end
+		end
+		local storedKey = stored.fontKey or stored.font or FontEditor.default.fontKey
+		local storedLabel = stored.fontLabel or stored.font or FontEditor.default.font
+		if type(storedKey) ~= "string" or storedKey == "" then
+			storedKey = FontEditor.default.fontKey
+		end
+		if type(storedLabel) ~= "string" or storedLabel == "" then
+			storedLabel = FontEditor.default.font
+		end
+		FontEditor.data.fontKey = storedKey
+		FontEditor.data.font = storedLabel
+		FontEditor.data.useCustomCycle = stored.useCustomCycle == true
+		if type(stored.targetCoreGui) == "boolean" then
+			FontEditor.data.targetCoreGui = stored.targetCoreGui
+		else
+			FontEditor.data.targetCoreGui = FontEditor.default.targetCoreGui
+		end
+		if type(stored.targetPlayerGui) == "boolean" then
+			FontEditor.data.targetPlayerGui = stored.targetPlayerGui
+		else
+			FontEditor.data.targetPlayerGui = FontEditor.default.targetPlayerGui
+		end
+		if type(stored.targetBillboardGui) == "boolean" then
+			FontEditor.data.targetBillboardGui = stored.targetBillboardGui
+		else
+			FontEditor.data.targetBillboardGui = FontEditor.default.targetBillboardGui
+		end
+		if type(stored.targetSurfaceGui) == "boolean" then
+			FontEditor.data.targetSurfaceGui = stored.targetSurfaceGui
+		else
+			FontEditor.data.targetSurfaceGui = FontEditor.default.targetSurfaceGui
+		end
+		FontEditor.data.enabled = stored.enabled == true
+	end
+
+	local function isBuilderIconFontFace(o)
+		local ff = NAlib.isProperty(o, "FontFace")
+		local ffType = ff and typeof(ff) or nil
+		local fam = ff and ff.Family or nil
+		return (ffType == "Font" or ffType == "FontFace")
+			and type(fam) == "string"
+			and fam:find("BuilderIcons/BuilderIcons.json", 1, true)
+	end
+
+	local function isNAUIElement(o)
+		return o and NAStuff and NAStuff.NASCREENGUI and o:IsDescendantOf(NAStuff.NASCREENGUI)
+	end
+
+	local function isFontTarget(o)
+		if not (o and o.Parent) then
+			return false
+		end
+		if HUI and o:IsDescendantOf(HUI) then
+			return false
+		end
+		if isNAUIElement(o) then
+			return false
+		end
+		return o:IsA("TextLabel") or o:IsA("TextButton") or o:IsA("TextBox")
+	end
+
+	local function getFontBB(o)
+		if not (FontEditor.data.targetBillboardGui and typeof(o) == "Instance") then
+			return nil
+		end
+		if o:IsA("BillboardGui") then
+			return o
+		end
+		local ok, ancestor = pcall(function()
+			return o:FindFirstAncestorOfClass("BillboardGui")
+		end)
+		if ok then
+			return ancestor
+		end
+		return nil
+	end
+
+	local function getFontSurf(o)
+		if not (FontEditor.data.targetSurfaceGui and typeof(o) == "Instance") then
+			return nil
+		end
+		if o:IsA("SurfaceGui") then
+			return o
+		end
+		local ok, ancestor = pcall(function()
+			return o:FindFirstAncestorOfClass("SurfaceGui")
+		end)
+		if ok then
+			return ancestor
+		end
+		return nil
+	end
+
+	local function captureFontFaceState(o)
+		local ok, value = pcall(function()
+			return o.FontFace
+		end)
+		if ok then
+			return true, value
+		end
+		return false, nil
+	end
+
+	local function applyFontToInstance(o)
+		if not isFontTarget(o) then
+			return
+		end
+		if isBuilderIconFontFace(o) then
+			return
+		end
+		if not FontEditor.currentFont then
+			return
+		end
+		if not FontEditor.store[o] then
+			local hasFF, ff = captureFontFaceState(o)
+			FontEditor.store[o] = {
+				Font = NAlib.isProperty(o, "Font"),
+				FontFace = ff,
+				FontFaceSupported = hasFF,
+			}
+		end
+		local storeInfo = FontEditor.store[o]
+		if FontEditor.currentFontIsCustom then
+			ensureFontWatcher(o)
+			if storeInfo and storeInfo.FontFaceSupported then
+				pcall(function()
+					o.FontFace = FontEditor.currentFont
+					o.Font = Enum.Font.Unknown
+				end)
+			end
+		else
+			if storeInfo and storeInfo.FontFaceSupported then
+				ensureFontWatcher(o)
+				pcall(function()
+					o.FontFace = storeInfo.FontFace
+				end)
+			end
+			local currentFont = NAlib.isProperty(o, "Font")
+			if currentFont == FontEditor.currentFont then
+				return
+			end
+			pcall(function()
+				o.Font = FontEditor.currentFont
+			end)
+		end
+	end
+
+	local function applyFontToDescendants(container)
+		if not container then
+			return
+		end
+		if isFontTarget(container) then
+			applyFontToInstance(container)
+		end
+		for _, descendant in ipairs(container:GetDescendants()) do
+			if isFontTarget(descendant) then
+				applyFontToInstance(descendant)
+			end
+		end
+	end
+
+	local function getFontTargets()
+		local containers = {}
+		if FontEditor.data.targetCoreGui and FontEditor.cg then
+			containers[#containers + 1] = FontEditor.cg
+		end
+		if FontEditor.data.targetPlayerGui then
+			local pg = getPlayerGui()
+			if pg then
+				containers[#containers + 1] = pg
+			end
+		end
+		local world = workspace
+		if FontEditor.data.targetBillboardGui and world and world.GetDescendants then
+			for _, inst in ipairs(world:GetDescendants()) do
+				if inst:IsA("BillboardGui") then
+					containers[#containers + 1] = inst
+				end
+			end
+		end
+		if FontEditor.data.targetSurfaceGui and world and world.GetDescendants then
+			for _, inst in ipairs(world:GetDescendants()) do
+				if inst:IsA("SurfaceGui") then
+					containers[#containers + 1] = inst
+				end
+			end
+		end
+		return containers
+	end
+
+	local function restoreAllFonts()
+		FontEditor.restoring = true
+		for target, info in pairs(FontEditor.store) do
+			if target and info then
+				if info.FontFaceSupported then
+					pcall(function()
+						target.FontFace = info.FontFace
+					end)
+				end
+				if info.Font ~= nil then
+					pcall(function()
+						target.Font = info.Font
+					end)
+				end
+			end
+			disconnectFontWatcher(target)
+		end
+		FontEditor.restoring = false
+		FontEditor.store = newFontStore()
+		FontEditor.watchers = {}
+	end
+
+	local function applyAllFonts()
+		if not FontEditor.data.enabled then
+			return
+		end
+		for _, container in ipairs(getFontTargets()) do
+			applyFontToDescendants(container)
+		end
+	end
+
+	local function applyFontChoice(choice, opts)
+		if not choice then
+			return false, "Invalid font choice."
+		end
+		opts = opts or {}
+		local resolvedFont = nil
+		local isCustom = choice.kind == "custom"
+		if isCustom then
+			local fontFace, err = getCustomFontAsset(choice.entry)
+			if not fontFace then
+				return false, err
+			end
+			resolvedFont = fontFace
+		else
+			resolvedFont = choice.enum
+		end
+		if not resolvedFont then
+			return false, "Unable to resolve font selection."
+		end
+		FontEditor.currentFont = resolvedFont
+		FontEditor.currentFontIsCustom = isCustom
+		FontEditor.data.fontKey = choice.key
+		FontEditor.data.font = choice.label
+		if opts.persist ~= false then
+			persistFontData()
+		end
+		if FontEditor.data.enabled and opts.apply ~= false then
+			applyAllFonts()
+		end
+		return true
+	end
+
+	local function setOverrideFont(fontKey, opts)
+		opts = opts or {}
+		local normalized = normalizeFontKey(fontKey)
+		local choice = getFontChoice(normalized) or getFontChoice(FontEditor.default.fontKey)
+		if not choice then
+			return
+		end
+		local ok, err = applyFontChoice(choice, opts)
+		if not ok and choice.kind == "custom" then
+			if not opts.silent then
+				DoNotif(err or "Unable to load custom font.", 3)
+			end
+			local fallback = getFontChoice(FontEditor.default.fontKey)
+			if fallback then
+				applyFontChoice(fallback, opts)
+			end
+		elseif not ok and not opts.silent then
+			DoNotif(err or "Unable to update override font.", 3)
+		end
+	end
+
+	local function cycleOverrideFont(delta)
+		local choices = getActiveFontChoices()
+		if #choices == 0 then
+			DoNotif("No fonts available to cycle.", 3)
+			return
+		end
+		local currentKey = FontEditor.data.fontKey or FontEditor.default.fontKey
+		local index = 1
+		for i, choice in ipairs(choices) do
+			if choice.key == currentKey then
+				index = i
+				break
+			end
+		end
+		local nextIndex = ((index - 1 + delta) % #choices) + 1
+		setOverrideFont(choices[nextIndex].key)
+	end
+
+	local function onFontDescendantAdded(o)
+		if FontEditor.data.enabled then
+			applyFontToDescendants(o)
+		end
+	end
+
+	local function onFontBillboardAdded(o)
+		if not FontEditor.data.enabled then
+			return
+		end
+		local root = getFontBB(o)
+		if root then
+			applyFontToDescendants(root)
+		end
+	end
+
+	local function onFontSurfaceAdded(o)
+		if not FontEditor.data.enabled then
+			return
+		end
+		local root = getFontSurf(o)
+		if root then
+			applyFontToDescendants(root)
+		end
+	end
+
+	local function refreshFontConnections()
+		NAlib.disconnect("FontEditor")
+		if FontEditor.data.targetCoreGui and FontEditor.cg then
+			NAlib.connect("FontEditor", FontEditor.cg.DescendantAdded:Connect(onFontDescendantAdded))
+		end
+
+		NAlib.disconnect("FontEditor_PlayerGui")
+		local pg = FontEditor.data.targetPlayerGui and getPlayerGui()
+		if pg then
+			NAlib.connect("FontEditor_PlayerGui", pg.DescendantAdded:Connect(onFontDescendantAdded))
+		end
+
+		local world = workspace
+		NAlib.disconnect("FontEditor_Billboard")
+		if FontEditor.data.targetBillboardGui and world then
+			NAlib.connect("FontEditor_Billboard", world.DescendantAdded:Connect(onFontBillboardAdded))
+		end
+
+		NAlib.disconnect("FontEditor_Surface")
+		if FontEditor.data.targetSurfaceGui and world then
+			NAlib.connect("FontEditor_Surface", world.DescendantAdded:Connect(onFontSurfaceAdded))
+		end
+	end
+
+	local function monitorFontPlayerGui()
+		local lp = Players and Players.LocalPlayer
+		if not lp then
+			return
+		end
+		NAlib.disconnect("FontEditor_PlayerGuiAdded")
+		NAlib.connect("FontEditor_PlayerGuiAdded", lp.ChildAdded:Connect(function(child)
+			if child:IsA("PlayerGui") then
+				refreshFontConnections()
+				if FontEditor.data.enabled then
+					applyAllFonts()
+				end
+			end
+		end))
+		NAlib.disconnect("FontEditor_PlayerGuiRemoved")
+		NAlib.connect("FontEditor_PlayerGuiRemoved", lp.ChildRemoved:Connect(function(child)
+			if child:IsA("PlayerGui") then
+				refreshFontConnections()
+			end
+		end))
+	end
+
+	local function updateFontTarget(field, value)
+		if FontEditor.data[field] == value then
+			return
+		end
+		FontEditor.data[field] = value
+		persistFontData()
+		refreshFontConnections()
+		if FontEditor.data.enabled then
+			restoreAllFonts()
+			applyAllFonts()
+		end
+	end
+
+	loadCustomFontManifest()
+	scanFonts()
+	rebuildFontChoices()
+	loadFontData()
+	setOverrideFont(FontEditor.data.fontKey, { persist = false, apply = false, silent = true })
+
+	refreshFontConnections()
+	monitorFontPlayerGui()
+
+	if FontEditor.data.enabled then
+		applyAllFonts()
+	end
+
+	NAgui.addSection("Corner Editor")
+	NAgui.addToggle("Override Corner Radius", CE.data.enabled, function(v)
+		CE.data.enabled = v
+		if CE.data.enabled then
+			applyCorn()
+		else
+			resetCorn()
+		end
+		saveCData()
+	end)
+	NAgui.addToggle("Corner Target: CoreGui", CE.data.targetCoreGui, function(v)
+		setCTgt("targetCoreGui", v == true)
+	end)
+	NAgui.addToggle("Corner Target: PlayerGui", CE.data.targetPlayerGui, function(v)
+		setCTgt("targetPlayerGui", v == true)
+	end)
+	NAgui.addToggle("Corner Target: BillboardGui", CE.data.targetBillboardGui, function(v)
+		setCTgt("targetBillboardGui", v == true)
+	end)
+	NAgui.addToggle("Corner Target: SurfaceGui", CE.data.targetSurfaceGui, function(v)
+		setCTgt("targetSurfaceGui", v == true)
+	end)
+	local sliderRadius = math.clamp(CE.data.radius, 0, 64)
+	NAgui.addSlider("Corner Radius", 0, 64, sliderRadius, 0.5, " px", function(v)
+		local parsed = math.clamp(tonumber(v) or CE.default.radius, 0, 64)
+		CE.data.radius = parsed
+		if CE.data.enabled then
+			applyCorn()
+		end
+		saveCData()
+	end)
+
+	NAgui.addSection("Font Changer")
+	NAgui.addToggle("Override Text Font", FontEditor.data.enabled, function(v)
+		FontEditor.data.enabled = v
+		if FontEditor.data.enabled then
+			applyAllFonts()
+		else
+			restoreAllFonts()
+		end
+		persistFontData()
+	end)
+	NAgui.addToggle("Font Target: CoreGui", FontEditor.data.targetCoreGui, function(v)
+		updateFontTarget("targetCoreGui", v == true)
+	end)
+	NAgui.addToggle("Font Target: PlayerGui", FontEditor.data.targetPlayerGui, function(v)
+		updateFontTarget("targetPlayerGui", v == true)
+	end)
+	NAgui.addToggle("Font Target: BillboardGui", FontEditor.data.targetBillboardGui, function(v)
+		updateFontTarget("targetBillboardGui", v == true)
+	end)
+	NAgui.addToggle("Font Target: SurfaceGui", FontEditor.data.targetSurfaceGui, function(v)
+		updateFontTarget("targetSurfaceGui", v == true)
+	end)
+	local fontInfoBox = NAgui.addInfo("Current Font", FontEditor.data.font)
+	local function refreshFontInfo()
+		if fontInfoBox then
+			fontInfoBox.Text = FontEditor.data.font
+		end
+	end
+	local cfInfo
+	local cfCycleLabel = "Cycle Custom Fonts Only"
+	local cfNameLabel = "Custom Font Name"
+	local cfUrlLabel = "Custom Font URL"
+	local function refreshFontUI()
+		if scanFonts() then
+			rebuildFontChoices()
+		end
+		if cfInfo then
+			cfInfo.Text = formatCustomFontStatus()
+		end
+		if not hasCustomFonts() and NAgui.setToggleState then
+			NAgui.setToggleState(cfCycleLabel, false, { force = true, fire = false })
+		end
+	end
+	local function openFontDeletePopup()
+		if not hasCustomFonts() then
+			DoNotif("No custom fonts installed.", 3)
+			return
+		end
+		if type(Popup) ~= "function" then
+			DoNotif("Popup UI is unavailable in this session.", 3)
+			return
+		end
+		local buttons = {}
+		for _, entry in ipairs(FontEditor.customFonts) do
+			local label = (entry.displayName or entry.name or entry.id) or "Custom Font"
+			table.insert(buttons, {
+				Text = label,
+				Callback = function()
+					local key = entry.id and ("custom:"..entry.id) or nil
+					local wasCurrent = key and FontEditor.data.fontKey == key
+					removeCustomFontEntry(entry, { deleteFiles = true })
+					rebuildFontChoices()
+					if wasCurrent then
+						setOverrideFont(FontEditor.default.fontKey)
+						refreshFontInfo()
+					end
+					refreshFontUI()
+					DoNotif(string.format("Removed custom font \"%s\".", label), 2)
+				end,
+			})
+		end
+		table.insert(buttons, { Text = "Cancel", Callback = function() end })
+		Popup({
+			Title = "Remove Custom Font",
+			Description = "Select a custom font to delete.",
+			Duration = 0,
+			Buttons = buttons,
+		})
+	end
+	refreshFontInfo()
+	NAgui.addButton("Previous Font", function()
+		cycleOverrideFont(-1)
+		refreshFontInfo()
+	end)
+	NAgui.addButton("Next Font", function()
+		cycleOverrideFont(1)
+		refreshFontInfo()
+	end)
+	NAgui.addButton("Reset Font", function()
+		setOverrideFont(FontEditor.default.fontKey)
+		refreshFontInfo()
+	end)
+	cfInfo = NAgui.addInfo("Custom Fonts", formatCustomFontStatus())
+	refreshFontUI()
+	FontEditor.refreshCustomFontUI = refreshFontUI
+	NAgui.addToggle(cfCycleLabel, FontEditor.data.useCustomCycle and hasCustomFonts(), function(v)
+		if v and not hasCustomFonts() then
+			DoNotif("Install a custom font first.", 3)
+			if NAgui.setToggleState then
+				NAgui.setToggleState(cfCycleLabel, false, { force = true, fire = false })
+			end
+			return
+		end
+		FontEditor.data.useCustomCycle = v == true
+		persistFontData()
+	end)
+	NAgui.addSection("Custom Font Loader")
+	NAgui.addInput(cfNameLabel, "Display name (optional)", FontEditor.customInputs.name, function(text)
+		FontEditor.customInputs.name = text or ""
+	end)
+	NAgui.addInput(cfUrlLabel, "Font URL (GitHub/raw/external)", FontEditor.customInputs.url, function(text)
+		FontEditor.customInputs.url = text or ""
+	end)
+	NAgui.addButton("Download Custom Font", function()
+		if not FileSupport then
+			DoNotif("Custom fonts require file support.", 3)
+			return
+		end
+		local ok, result = addOrUpdateCustomFont(FontEditor.customInputs.name, FontEditor.customInputs.url)
+		if ok and type(result) == "table" then
+			local function clearInputs()
+				if NAgui.setInputValue then
+					NAgui.setInputValue(cfNameLabel, "", { force = true, fire = false })
+					NAgui.setInputValue(cfUrlLabel, "", { force = true, fire = false })
+				end
+				FontEditor.customInputs.name = ""
+				FontEditor.customInputs.url = ""
+			end
+			if result.multi and type(result.entries) == "table" and #result.entries > 0 then
+				local lastEntry = result.entries[#result.entries]
+				if lastEntry and lastEntry.id then
+					setOverrideFont("custom:"..lastEntry.id)
+				end
+				refreshFontInfo()
+				refreshFontUI()
+				clearInputs()
+				local count = result.count or #result.entries
+				DoNotif(string.format("Installed %d font%s from folder.", count, count == 1 and "" or "s"), 2)
+			elseif result.id then
+				setOverrideFont("custom:"..result.id)
+				refreshFontInfo()
+				refreshFontUI()
+				clearInputs()
+				DoNotif("Custom font saved.", 2)
+			else
+				refreshFontInfo()
+				refreshFontUI()
+				clearInputs()
+				DoNotif("Custom font saved.", 2)
+			end
+		else
+			DoNotif(result or "Unable to save custom font.", 3)
+		end
+	end)
+	NAgui.addButton("Download NA Fonts", function()
+		if FontEditor.dlBusy then
+			DoNotif("Preset font download already running.", 3)
+			return
+		end
+		FontEditor.dlBusy = true
+		local ok, res = dlNAFonts()
+		FontEditor.dlBusy = false
+		if ok then
+			refreshFontInfo()
+			refreshFontUI()
+			DoNotif(string.format("Installed %d NA font%s.", res, res == 1 and "" or "s"), 2)
+		else
+			DoNotif(res or "Unable to download NA fonts.", 3)
+		end
+	end)
+	NAgui.addButton("Remove Custom Font...", openFontDeletePopup)
+	NAgui.addButton("Reload Custom Fonts", function()
+		loadCustomFontManifest()
+		scanFonts()
+		rebuildFontChoices()
+		setOverrideFont(FontEditor.data.fontKey, { persist = false, apply = false, silent = true })
+		refreshFontInfo()
+		refreshFontUI()
+		DoNotif("Custom fonts reloaded.", 2)
+	end)
+	NAgui.addButton("Remove All Custom Fonts", function()
+		if not hasCustomFonts() then
+			DoNotif("No custom fonts installed.", 3)
+			return
+		end
+		local wasCustom = type(FontEditor.data.fontKey) == "string" and FontEditor.data.fontKey:find("^custom:") == 1
+		removeAllCustomFonts()
+		if wasCustom then
+			setOverrideFont(FontEditor.default.fontKey)
+			refreshFontInfo()
+		end
+		refreshFontUI()
+		DoNotif("Removed all custom fonts.", 2)
+	end)
+
+	local Icfg = {
+		path = NAfiles.NAICONSETTINGSPATH or (NAfiles.NAFILEPATH.."/custom_icon.json"),
+		def = {
+			enabled = false,
+			assetId = "",
+			localPath = "",
+			index = 0,
+		},
+	}
+
+	local function loadIcfg()
+		local d = Icfg.def
+		if FileSupport then
+			if not isfile(Icfg.path) then
+				writefile(Icfg.path, HttpService:JSONEncode(Icfg.def))
+			end
+			local ok, raw = pcall(readfile, Icfg.path)
+			if ok and type(raw) == "string" then
+				local okD, dec = pcall(HttpService.JSONDecode, HttpService, raw)
+				if okD and type(dec) == "table" then
+					d = dec
+				end
+			end
+		end
+		return d
+	end
+
+	local function saveIcfg()
+		if not FileSupport then
+			return
+		end
+		local payload = {
+			enabled = NAStuff.CustomIcon.enabled == true,
+			assetId = typeof(NAStuff.CustomIcon.assetId) == "string" and NAStuff.CustomIcon.assetId or "",
+			localPath = typeof(NAStuff.CustomIcon.localPath) == "string" and NAStuff.CustomIcon.localPath or "",
+			index = tonumber(NAStuff.CustomIcon.index) or 0,
+		}
+		pcall(writefile, Icfg.path, HttpService:JSONEncode(payload))
+	end
+
+	NAStuff.iconAppearance = NAStuff.iconAppearance or {
+		background = NAStuff.NAICONMAIN.BackgroundTransparency;
+		text = (NAStuff.IconFallbackLabel and NAStuff.IconFallbackLabel.TextTransparency) or (NAStuff.NAICONMAIN:IsA("TextButton") and NAStuff.NAICONMAIN.TextTransparency) or nil;
+		stroke = (NAStuff.IconFallbackLabel and NAStuff.IconFallbackLabel.TextStrokeTransparency) or (NAStuff.NAICONMAIN:IsA("TextButton") and NAStuff.NAICONMAIN.TextStrokeTransparency) or nil;
+		image = NAStuff.NAICONMAIN:IsA("ImageButton") and NAStuff.NAICONMAIN.ImageTransparency or nil;
+	}
+
+	NAStuff.IconSrc = NAStuff.IconSrc or {
+		list = "https://api.github.com/repos/ltseverydayyou/uuuuuuu/contents/NAicons?ref=main";
+		raw = "https://raw.githubusercontent.com/ltseverydayyou/uuuuuuu/main/NAicons/";
+	}
+
+	NAStuff.CustomIcon = NAStuff.CustomIcon or {}
+	NAStuff.CustomIcon.entries = NAStuff.CustomIcon.entries or {}
+	NAStuff.CustomIcon.index = NAStuff.CustomIcon.index or 0
+
+	NAgui.iconFsOk = function()
+		return FileSupport and type(writefile) == "function" and type(getcustomasset) == "function"
+	end
+
+	local icfg = loadIcfg()
+	if type(icfg) == "table" then
+		if typeof(icfg.assetId) == "string" and icfg.assetId ~= "" then
+			NAStuff.CustomIcon.assetId = icfg.assetId
+		end
+		if typeof(icfg.localPath) == "string" and icfg.localPath ~= "" then
+			NAStuff.CustomIcon.localPath = icfg.localPath
+		end
+		if typeof(icfg.enabled) == "boolean" then
+			NAStuff.CustomIcon.enabled = icfg.enabled
+		end
+		if typeof(icfg.index) == "number" then
+			NAStuff.CustomIcon.index = icfg.index
+		end
+	end
+
+	if typeof(NAStuff.CustomIcon.localPath) == "string"
+		and NAStuff.CustomIcon.localPath ~= ""
+		and NAgui.iconFsOk()
+	then
+		local okA, assetFromFile = pcall(getcustomasset, NAStuff.CustomIcon.localPath)
+		if okA and typeof(assetFromFile) == "string" then
+			NAStuff.CustomIcon.assetId = assetFromFile
+		end
+	end
+
+	NAgui.getNAIconList = function()
+		local src = NAStuff.IconSrc
+		if not src or typeof(src.list) ~= "string" or src.list == "" then
+			return false, "NA icon catalog URL not configured."
+		end
+		local ok, raw = pcall(function()
+			return game:HttpGet(src.list)
+		end)
+		if not (ok and typeof(raw) == "string" and raw ~= "") then
+			return false, "Unable to fetch NA icon catalog."
+		end
+		local okD, decoded = pcall(HttpService.JSONDecode, HttpService, raw)
+		if not (okD and type(decoded) == "table") then
+			return false, "Invalid NA icon catalog."
+		end
+		local items = {}
+		if #decoded > 0 then
+			for _, entry in ipairs(decoded) do
+				items[#items + 1] = entry
+			end
+		else
+			for _, entry in pairs(decoded) do
+				if type(entry) == "table" then
+					items[#items + 1] = entry
+				end
+			end
+		end
+		local icons = {}
+		for _, e in ipairs(items) do
+			if type(e) == "table" and type(e.name) == "string" and e.type == "file" then
+				local url = e.download_url or (src.raw and (src.raw..e.name))
+				if type(url) == "string" and url ~= "" then
+					icons[#icons + 1] = {
+						name = e.name;
+						url = url;
+					}
+				end
+			end
+		end
+		if #icons == 0 then
+			return false, "No NA icons available."
+		end
+		return true, icons
+	end
+	NAgui.downloadNAIcons = function()
+		if not NAgui.iconFsOk() then
+			return false, "Custom icons require file support and getcustomasset."
+		end
+		if not NAgui.ensureIconFolder() then
+			return false, "Unable to prepare CustomIcon folder."
+		end
+		local okList, icons = NAgui.getNAIconList()
+		if not okList then
+			return false, icons
+		end
+		local count = 0
+		local lastErr = nil
+		for _, ico in ipairs(icons) do
+			local okSave, errOrAsset = NAgui.iconSaveFromUrl(ico.url)
+			if okSave then
+				count += 1
+			else
+				lastErr = errOrAsset
+			end
+		end
+		if count == 0 then
+			return false, lastErr or "No NA icons downloaded."
+		end
+		return true, count
+	end
+
+	NAgui.ensureIconFolder = function()
+		if not FileSupport then
+			return false
+		end
+		local dir = NAfiles.NACUSTOMICONPATH
+		if typeof(dir) ~= "string" or dir == "" then
+			return false
+		end
+		if type(isfolder) == "function" then
+			local ok, exists = pcall(isfolder, dir)
+			if ok and exists then
+				return true
+			end
+			if type(makefolder) ~= "function" then
+				return false
+			end
+			local okMk = pcall(makefolder, dir)
+			return okMk == true
+		end
+		return true
+	end
+
+	NAgui.iconPreUrl = function(u)
+		if typeof(u) ~= "string" then
+			return nil
+		end
+		local t = u:match("^%s*(.-)%s*$") or ""
+		if t == "" then
+			return nil
+		end
+		t = t:gsub(" ", "%%20")
+		local q = t:find("%?")
+		local base = q and t:sub(1, q - 1) or t
+		return t, base
+	end
+
+	NAgui.iconNormUrl = function(u)
+		local t, base = NAgui.iconPreUrl(u)
+		if not t then
+			return nil
+		end
+		local owner, repo, kind, rest = base:match("^https?://github.com/([^/]+)/([^/]+)/([^/]+)/(.+)$")
+		if owner and repo and kind and rest then
+			local s = rest
+			if s:sub(1, 11) == "refs/heads/" then
+				s = s:sub(12)
+			elseif s:sub(1, 10) == "refs/tags/" then
+				s = s:sub(11)
+			end
+			local branch, path = s:match("^([^/]+)/(.+)$")
+			if branch and path and (kind == "blob" or kind == "raw") then
+				branch = branch:gsub("%%2[Ff]", "/")
+				path = path:gsub("%%2[Ff]", "/")
+				return string.format("https://raw.githubusercontent.com/%s/%s/%s/%s", owner, repo, branch, path)
+			end
+		end
+		local rawDir = base:match("^https?://raw%.githubusercontent%.com/.+")
+		if rawDir then
+			return t
+		end
+		return t
+	end
+
+	NAgui.scanCustomIcons = function()
+		if not (FileSupport and listfiles) then
+			return
+		end
+		if not NAgui.ensureIconFolder() then
+			return
+		end
+		local dir = NAfiles.NACUSTOMICONPATH
+		local ok, items = pcall(listfiles, dir)
+		if not (ok and type(items) == "table") then
+			return
+		end
+		local list = {}
+		for _, fullPath in ipairs(items) do
+			local name = getFName(fullPath)
+			if name then
+				list[#list + 1] = { file = name }
+			end
+		end
+		NAStuff.CustomIcon.entries = list
+		local idx = 0
+		if typeof(NAStuff.CustomIcon.localPath) == "string" and NAStuff.CustomIcon.localPath ~= "" then
+			local cur = getFName(NAStuff.CustomIcon.localPath)
+			if cur then
+				for i, e in ipairs(list) do
+					if e.file == cur then
+						idx = i
+						break
+					end
+				end
+			end
+		end
+		if idx == 0 and #list > 0 then
+			idx = 1
+		end
+		NAStuff.CustomIcon.index = idx
+	end
+
+	NAgui.formatCustomIconStatus = function()
+		local list = NAStuff.CustomIcon.entries or {}
+		local n = #list
+		if n == 0 then
+			return "No custom icons installed"
+		end
+		if n == 1 then
+			return "1 custom icon installed"
+		end
+		return tostring(n).." custom icons installed"
+	end
+
+	NAgui.refreshCustomIconUI = function()
+		local info = NAStuff.CustomIcon.info
+		if info then
+			info.Text = NAgui.formatCustomIconStatus()
+		end
+	end
+
+	NAgui.iconSaveFromUrl = function(url)
+		if not NAgui.iconFsOk() then
+			return false, "Custom image icons require file support and getcustomasset."
+		end
+		if not NAgui.ensureIconFolder() then
+			return false, "Unable to prepare CustomIcon folder."
+		end
+		local norm = NAgui.iconNormUrl(url)
+		if not norm then
+			return false, "Enter a valid image URL or asset id."
+		end
+		local ok, data = pcall(function()
+			return game:HttpGet(norm)
+		end)
+		if not (ok and typeof(data) == "string" and data ~= "") then
+			return false, "Unable to download custom icon image."
+		end
+		local remoteFile = deriveFileNameFromUrl(norm) or "CustomIcon.png"
+		local safeName = sanitizeFileName(remoteFile) or ("icon_"..tostring(os.time())..".png")
+		local fullPath = NAfiles.NACUSTOMICONPATH.."/"..safeName
+		local okW, errW = pcall(writefile, fullPath, data)
+		if not okW then
+			return false, errW or "Unable to save custom icon image."
+		end
+		local okA, asset = pcall(getcustomasset, fullPath)
+		if not (okA and typeof(asset) == "string") then
+			return false, "Unable to load custom icon image."
+		end
+		NAStuff.CustomIcon.localPath = fullPath
+		local list = NAStuff.CustomIcon.entries or {}
+		local idx = nil
+		for i, e in ipairs(list) do
+			if e.file == safeName then
+				idx = i
+				break
+			end
+		end
+		if not idx then
+			list[#list + 1] = { file = safeName }
+			idx = #list
+		end
+		NAStuff.CustomIcon.entries = list
+		NAStuff.CustomIcon.index = idx
+		return true, asset
+	end
+
+	if NAmanage and type(NAmanage.NASettingsGet) == "function" then
+		local storedAsset = NAmanage.NASettingsGet("customIconAssetId")
+		local storedPath = NAmanage.NASettingsGet("customIconLocalPath")
+		if typeof(storedPath) == "string" and storedPath ~= "" and NAgui.iconFsOk() then
+			NAStuff.CustomIcon.localPath = storedPath
+			local okA, assetFromFile = pcall(getcustomasset, storedPath)
+			if okA and typeof(assetFromFile) == "string" then
+				NAStuff.CustomIcon.assetId = assetFromFile
+			elseif typeof(storedAsset) == "string" and storedAsset ~= "" then
+				NAStuff.CustomIcon.assetId = storedAsset
+			end
+		elseif typeof(storedAsset) == "string" and storedAsset ~= "" then
+			NAStuff.CustomIcon.assetId = storedAsset
+		end
+		local storedEnabled = NAmanage.NASettingsGet("customIconEnabled")
+		if typeof(storedEnabled) == "boolean" then
+			NAStuff.CustomIcon.enabled = storedEnabled
+		end
+	end
+
+	if NAgui.iconSupported() and NAStuff.NAICONMAIN and typeof(NAStuff.NAICONMAIN.Image) == "string" and NAStuff.NAICONMAIN.Image ~= "" then
+		NAStuff.CustomIcon.defaultImage = NAStuff.CustomIcon.defaultImage or NAStuff.NAICONMAIN.Image
+	end
+
+	if typeof(NAStuff.CustomIcon.assetId) ~= "string" or NAStuff.CustomIcon.assetId == "" then
+		NAStuff.CustomIcon.assetId = nil
+	end
+
+	if typeof(NAStuff.CustomIcon.enabled) ~= "boolean" then
+		NAStuff.CustomIcon.enabled = false
+	end
+
+	NAgui._saveIconSettings = function()
+		saveIcfg()
+	end
+
+	NAgui.getIconDigits = function()
+		if typeof(NAStuff.CustomIcon.assetId) == "string" then
+			return NAStuff.CustomIcon.assetId:match("(%d+)$") or ""
+		end
+		return ""
+	end
+
+	NAgui._applyIconState = function()
+		if not NAgui.iconSupported() then
+			return false
+		end
+		local state = NAStuff.CustomIcon
+		local targetImage
+		if state.enabled and typeof(state.assetId) == "string" and state.assetId ~= "" then
+			targetImage = state.assetId
+		elseif typeof(state.defaultImage) == "string" and state.defaultImage ~= "" then
+			targetImage = state.defaultImage
+		end
+		local applied = false
+		if targetImage and targetImage ~= "" then
+			NAStuff.NAICONMAIN.Image = targetImage
+			applied = true
+		else
+			NAStuff.NAICONMAIN.Image = ""
+		end
+		if NAStuff.IconFallbackLabel then
+			NAStuff.IconFallbackLabel.Visible = not applied
+		end
+		return applied
+	end
+
+	NAgui.useCustomIconEntry = function(entry, opts)
+		opts = opts or {}
+		if not NAgui.iconSupported() then
+			return false, "Custom icon requires getcustomasset support for the NA icon."
+		end
+		if not entry or not entry.file then
+			return false, "No custom icon entry."
+		end
+		if not NAgui.ensureIconFolder() then
+			return false, "Unable to prepare CustomIcon folder."
+		end
+		local fullPath = NAfiles.NACUSTOMICONPATH.."/"..entry.file
+		if type(isfile) == "function" then
+			local okEx, ex = pcall(isfile, fullPath)
+			if not (okEx and ex) then
+				return false, "Custom icon file is missing."
+			end
+		end
+		local okA, asset = pcall(getcustomasset, fullPath)
+		if not (okA and typeof(asset) == "string") then
+			return false, "Unable to load custom icon image."
+		end
+		NAStuff.CustomIcon.localPath = fullPath
+		NAStuff.CustomIcon.assetId = asset
+		if opts.autoEnable ~= false then
+			NAStuff.CustomIcon.enabled = true
+		end
+		NAgui._applyIconState()
+		NAgui._saveIconSettings()
+		return true
+	end
+
+	NAgui.cycleCustomIcon = function(delta)
+		local list = NAStuff.CustomIcon.entries or {}
+		if #list == 0 then
+			DoNotif("No custom icons installed.", 3)
+			return
+		end
+		delta = delta or 1
+		local idx = NAStuff.CustomIcon.index or 0
+		if idx < 1 or idx > #list then
+			idx = 1
+		end
+		idx = ((idx - 1 + delta) % #list) + 1
+		local ok, err = NAgui.useCustomIconEntry(list[idx])
+		if not ok then
+			if err then
+				DoNotif(err, 3)
+			end
+			return
+		end
+		NAStuff.CustomIcon.index = idx
+	end
+
+	NAgui.setIconEnabled = function(enabled, opts)
+		opts = opts or {}
+		if not NAgui.iconSupported() then
+			return false, "Custom icon requires getcustomasset support for the NA icon."
+		end
+		enabled = enabled and true or false
+		if enabled and not NAStuff.CustomIcon.assetId then
+			if not opts.skipToggle and NAgui.setToggleState then
+				NAgui.setToggleState("Use Custom NA Icon", false, { force = true, fire = false })
+			end
+			return false, "Add an asset id or URL before enabling the custom icon."
+		end
+		if NAStuff.CustomIcon.enabled == enabled and not opts.force then
+			return true
+		end
+		NAStuff.CustomIcon.enabled = enabled
+		NAgui._applyIconState()
+		if not opts.skipToggle and NAgui.setToggleState then
+			NAgui.setToggleState("Use Custom NA Icon", enabled, { force = true, fire = false })
+		end
+		NAgui._saveIconSettings()
+		return true
+	end
+
+	NAgui.setIconAsset = function(inputValue, opts)
+		opts = opts or {}
+		if not NAgui.iconSupported() then
+			return false, "Custom icon requires getcustomasset support for the NA icon."
+		end
+		local raw = typeof(inputValue) == "string" and inputValue or tostring(inputValue)
+		if typeof(raw) ~= "string" then
+			return false, "Enter a valid asset id or image URL."
+		end
+		raw = raw:match("^%s*(.-)%s*$")
+		if raw == "" then
+			return false, "Enter a valid asset id or image URL."
+		end
+		local digits = raw:match("^rbxassetid://(%d+)$") or raw:match("id=(%d+)") or raw:match("^(%d+)$")
+		local newAsset
+		NAStuff.CustomIcon.localPath = nil
+		if digits then
+			newAsset = "rbxassetid://"..digits
+		else
+			local t, base = NAgui.iconPreUrl(raw)
+			if not t then
+				return false, "Enter a valid asset id or image URL."
+			end
+			local folderInfo = parseGitHubFolderUrl(base, t)
+			if folderInfo then
+				local okFolder, res = NAgui.installIconsFromGitHubFolder(folderInfo)
+				if not okFolder then
+					return false, res or "Unable to save custom icon."
+				end
+				NAgui.scanCustomIcons()
+				NAgui.refreshCustomIconUI()
+				newAsset = res and res.asset
+				if not newAsset then
+					return false, "Installed icons but failed to apply one of them."
+				end
+			else
+				local okIcon, r = NAgui.iconSaveFromUrl(t)
+				if not okIcon then
+					return false, r or "Unable to save custom icon."
+				end
+				newAsset = r
+			end
+		end
+		NAStuff.CustomIcon.assetId = newAsset
+		if opts.autoEnable ~= false then
+			NAStuff.CustomIcon.enabled = true
+		end
+		NAgui._applyIconState()
+		if opts.autoEnable ~= false and not opts.skipToggle and NAgui.setToggleState then
+			NAgui.setToggleState("Use Custom NA Icon", true, { force = true, fire = false })
+		end
+		NAgui._saveIconSettings()
+		if digits then
+			return true, digits
+		end
+		return true, raw
+	end
+
+	if NAStuff.CustomIcon.enabled and NAStuff.CustomIcon.assetId and NAgui.iconSupported() then
+		NAgui._applyIconState()
+	end
+
+	NAgui.scanCustomIcons()
+
+	NAStuff.CustomIcon.pendingInput = NAStuff.CustomIcon.pendingInput or ((NAgui.getIconDigits and NAgui.getIconDigits()) or "")
+
+	local function deleteIconFile(name)
+		if type(name) ~= "string" or name == "" then
+			return
+		end
+		if type(isfile) ~= "function" or type(delfile) ~= "function" then
+			return
+		end
+		local full = NAfiles.NACUSTOMICONPATH.."/"..name
+		local okEx, ex = pcall(isfile, full)
+		if okEx and ex then
+			pcall(delfile, full)
+		end
+	end
+
+	local function clearCurrentIconIf(fileName)
+		if type(fileName) ~= "string" or fileName == "" then
+			return
+		end
+		local full = NAfiles.NACUSTOMICONPATH.."/"..fileName
+		if NAStuff.CustomIcon.localPath == full then
+			NAStuff.CustomIcon.localPath = nil
+			NAStuff.CustomIcon.assetId = nil
+			NAStuff.CustomIcon.index = 0
+			NAStuff.CustomIcon.enabled = false
+			NAgui._applyIconState()
+			if NAgui.setToggleState then
+				NAgui.setToggleState("Use Custom NA Icon", false, { force = true, fire = false })
+			end
+			NAgui._saveIconSettings()
+		end
+	end
+
+	local function removeCustomIconEntry(entry)
+		if not (entry and entry.file) then
+			return
+		end
+		deleteIconFile(entry.file)
+		clearCurrentIconIf(entry.file)
+		NAgui.scanCustomIcons()
+		NAgui.refreshCustomIconUI()
+	end
+
+	local function removeAllCustomIcons()
+		local list = NAStuff.CustomIcon.entries or {}
+		for _, entry in ipairs(list) do
+			if entry and entry.file then
+				deleteIconFile(entry.file)
+			end
+		end
+		NAStuff.CustomIcon.entries = {}
+		NAStuff.CustomIcon.index = 0
+		NAStuff.CustomIcon.localPath = nil
+		NAStuff.CustomIcon.assetId = nil
+		NAStuff.CustomIcon.enabled = false
+		NAgui._applyIconState()
+		if NAgui.setToggleState then
+			NAgui.setToggleState("Use Custom NA Icon", false, { force = true, fire = false })
+		end
+		NAgui._saveIconSettings()
+		NAgui.scanCustomIcons()
+		NAgui.refreshCustomIconUI()
+	end
+
+	local function openIconDeletePopup()
+		local list = NAStuff.CustomIcon.entries or {}
+		if #list == 0 then
+			DoNotif("No custom icons installed.", 3)
+			return
+		end
+		if type(Popup) ~= "function" then
+			DoNotif("Popup UI is unavailable in this session.", 3)
+			return
+		end
+		local buttons = {}
+		for _, entry in ipairs(list) do
+			local label = entry.file or "Custom Icon"
+			table.insert(buttons, {
+				Text = label,
+				Callback = function()
+					removeCustomIconEntry(entry)
+					DoNotif('Removed custom icon "'..label..'".', 2)
+				end,
+			})
+		end
+		table.insert(buttons, { Text = "Cancel", Callback = function() end })
+		Popup({
+			Title = "Remove Custom Icon",
+			Description = "Select a custom icon to delete.",
+			Duration = 0,
+			Buttons = buttons,
+		})
+	end
+
+	NAgui.addSection("Custom NA Icon")
+
+	NAStuff.CustomIcon.info = NAgui.addInfo("Custom Icons", NAgui.formatCustomIconStatus())
+	NAgui.refreshCustomIconUI()
+
+	NAgui.addToggle("Use Custom NA Icon", NAStuff.CustomIcon.enabled == true and NAgui.iconSupported(), function(v)
+		if not NAgui.iconSupported() then
+			DoNotif("Custom icon requires getcustomasset support for the NA icon.", 3)
+			if NAgui.setToggleState then
+				NAgui.setToggleState("Use Custom NA Icon", false, { force = true, fire = false })
+			end
+			return
+		end
+		local ok, err = NAgui.setIconEnabled(v, { skipToggle = true })
+		if not ok then
+			if err then
+				DoNotif(err, 3)
+			end
+			if NAgui.setToggleState then
+				NAgui.setToggleState("Use Custom NA Icon", NAStuff.CustomIcon.enabled == true, { force = true, fire = false })
+			end
+			return
+		end
+		DoNotif("Custom NA Icon "..(v and "enabled" or "disabled"), 2)
+	end)
+
+	NAmanage.RegisterToggleAutoSync("Use Custom NA Icon", function()
+		return NAStuff.CustomIcon.enabled == true and NAgui.iconSupported()
+	end)
+
+	NAgui.addInput("Custom Icon Asset / URL", "Enter asset id or image URL", NAStuff.CustomIcon.pendingInput, function(text)
+		NAStuff.CustomIcon.pendingInput = text or ""
+	end)
+
+	NAgui.addButton("Apply Custom Icon", function()
+		if not NAgui.iconSupported() then
+			DoNotif("Custom icon requires getcustomasset support for the NA icon.", 3)
+			return
+		end
+		local ok, result = NAgui.setIconAsset(NAStuff.CustomIcon.pendingInput)
+		if ok then
+			NAStuff.CustomIcon.pendingInput = ""
+			if NAgui.setInputValue then
+				NAgui.setInputValue("Custom Icon Asset / URL", "", { force = true, fire = false })
+			end
+			NAgui.scanCustomIcons()
+			NAgui.refreshCustomIconUI()
+			DoNotif("Custom NA Icon updated.", 2)
+		else
+			DoNotif(result or "Unable to update custom icon.", 3)
+		end
+	end)
+
+	NAgui.addButton("Previous Custom Icon", function()
+		NAgui.cycleCustomIcon(-1)
+	end)
+
+	NAgui.addButton("Next Custom Icon", function()
+		NAgui.cycleCustomIcon(1)
+	end)
+
+	NAgui.addButton("Download NA Icons", function()
+		local ok, res = NAgui.downloadNAIcons()
+		if ok then
+			NAgui.scanCustomIcons()
+			NAgui.refreshCustomIconUI()
+			DoNotif(string.format("Installed %d NA icon%s.", res, res == 1 and "" or "s"), 2)
+		else
+			DoNotif(res or "Unable to download NA icons.", 3)
+		end
+	end)
+
+	NAgui.addButton("Reload Custom Icons", function()
+		NAgui.scanCustomIcons()
+		NAgui.refreshCustomIconUI()
+		DoNotif("Custom icons reloaded.", 2)
+	end)
+
+	NAgui.addButton("Remove Custom Icon...", openIconDeletePopup)
+
+	NAgui.addButton("Remove All Custom Icons", function()
+		local list = NAStuff.CustomIcon.entries or {}
+		if #list == 0 then
+			DoNotif("No custom icons installed.", 3)
+			return
+		end
+		removeAllCustomIcons()
+		DoNotif("Removed all custom icons.", 2)
+	end)
+end
+
 local NAScale = 1
 local NAUIScale = 1
 local flingManager = { FlingOldPos = nil; lFlingOldPos = nil; cFlingOldPos = nil; }
@@ -561,11 +3623,206 @@ NAjobs  = NAjobs  or { jobs = {}, hb = nil, seq = 0, _frame = 0, _claimed = {}, 
 NAutil  = NAutil  or {}
 NAsuppress = NAsuppress or { ref = setmetatable({}, {__mode="k"}), snap = setmetatable({}, {__mode="k"}) }
 NACOLOREDELEMENTS={}
+NACOLOREDELEMENTS_SET=setmetatable({}, {__mode="k"})
+
+DEFAULT_UI_STROKE_COLOR=Color3.fromRGB(148,93,255)
+COLOR_WHITE=Color3.new(1,1,1)
+COLOR_BLACK=Color3.new(0,0,0)
+
+NAmanage.FormatAccountAge=function(days)
+	if type(days) ~= "number" then
+		return "Unknown"
+	end
+	if days < 0 then
+		days = 0
+	end
+	local years=math.floor(days/365)
+	local remainingDays=days%365
+	local months=math.floor(remainingDays/30)
+	local finalDays=math.floor(remainingDays%30)
+	local parts={}
+	if years>0 then parts[#parts+1]=tostring(years).." yr" end
+	if months>0 then parts[#parts+1]=tostring(months).." mo" end
+	if finalDays>0 or #parts==0 then parts[#parts+1]=tostring(finalDays).." d" end
+	return table.concat(parts," ")
+end
+
+NAgui.RegisterColoredStroke=function(stroke)
+	if typeof(stroke) ~= "Instance" then return end
+	if not stroke:IsA("UIStroke") then return end
+	if NACOLOREDELEMENTS_SET[stroke] then return end
+	NACOLOREDELEMENTS_SET[stroke]=true
+	local baseColor=NAUISTROKER or DEFAULT_UI_STROKE_COLOR or stroke.Color
+	stroke.Color=baseColor
+	Insert(NACOLOREDELEMENTS,stroke)
+end
+
+NAgui.RegisterStrokesFrom=function(instance)
+	if typeof(instance) ~= "Instance" then return end
+	if instance:IsA("UIStroke") then
+		NAgui.RegisterColoredStroke(instance)
+		return
+	end
+	for _, descendant in ipairs(instance:GetDescendants()) do
+		if descendant:IsA("UIStroke") then
+			NAgui.RegisterColoredStroke(descendant)
+		end
+	end
+end
+
+NAgui.ComputeTabStrokeColor=function(isActive)
+	local base=NAUISTROKER or DEFAULT_UI_STROKE_COLOR
+	if isActive then
+		return base:Lerp(COLOR_WHITE,0.22)
+	end
+	return base:Lerp(COLOR_BLACK,0.12)
+end
+
+NAmanage.getTabStrokeColor = NAgui.ComputeTabStrokeColor
+
+NAmanage.GetBasicInfoSnapshot = function()
+	local snapshot = {
+		player = {};
+		platform = {};
+		game = {};
+		ids = {};
+		server = {};
+		system = {};
+		flags = {};
+		timestamp = "";
+	}
+
+	local player = Players and Players.LocalPlayer
+	local displayName = player and player.DisplayName or "Unknown"
+	local username = player and player.Name or "Unknown"
+	local userId = player and player.UserId or nil
+	local accountAgeDays = player and player.AccountAge or nil
+	local membership = "None"
+	if player and player.MembershipType == Enum.MembershipType.Premium then
+		membership = "Premium"
+	end
+
+	snapshot.player.displayName = displayName
+	snapshot.player.username = username
+	snapshot.player.userId = userId and tostring(userId) or "Unknown"
+	snapshot.player.accountAge = NAmanage.FormatAccountAge(accountAgeDays)
+	snapshot.player.membership = membership
+
+	local platformName = "Unknown"
+	if UserInputService then
+		local okPlatform, platformEnum = pcall(UserInputService.GetPlatform, UserInputService)
+		if okPlatform and platformEnum then
+			platformName = platformEnum.Name or tostring(platformEnum)
+		end
+	end
+
+	local executorName = "Unknown"
+	if identifyexecutor then
+		local okExec, execResult = pcall(identifyexecutor)
+		if okExec and execResult and execResult ~= "" then
+			executorName = execResult
+		end
+	elseif identifyexec then
+		local okExecAlt, execResultAlt = pcall(identifyexec)
+		if okExecAlt and execResultAlt and execResultAlt ~= "" then
+			executorName = execResultAlt
+		end
+	end
+
+	snapshot.platform.platform = platformName
+	snapshot.platform.executor = executorName
+
+	local robloxLocale = LocalizationService and LocalizationService.RobloxLocaleId or "Unknown"
+	local systemLocale = LocalizationService and LocalizationService.SystemLocaleId or "Unknown"
+
+	local qualitySetting = "Auto"
+	local okUGS, userGameSettings = pcall(function()
+		return UserSettings():GetService("UserGameSettings")
+	end)
+	if okUGS and userGameSettings then
+		local savedQuality = userGameSettings.SavedQualityLevel
+		if typeof(savedQuality) == "EnumItem" then
+			qualitySetting = savedQuality.Name or tostring(savedQuality)
+		elseif savedQuality ~= nil then
+			qualitySetting = tostring(savedQuality)
+		end
+	end
+
+	local voiceStatus = "Unknown"
+	local okVoiceService, voiceService = pcall(game.GetService, game, "VoiceChatService")
+	if okVoiceService and voiceService and userId then
+		local okVoice, voiceEnabled = pcall(function()
+			return voiceService:IsVoiceEnabledForUserIdAsync(userId)
+		end)
+		if okVoice then
+			voiceStatus = voiceEnabled and "Enabled" or "Disabled"
+		end
+	end
+
+	snapshot.system.robloxLocale = robloxLocale
+	snapshot.system.systemLocale = systemLocale
+	snapshot.system.quality = qualitySetting
+	snapshot.system.voice = voiceStatus
+
+	local placeId = tonumber(game.PlaceId) or 0
+	local gameId = game.GameId or "Unknown"
+	local jobIdValue = game.JobId
+	if jobIdValue == nil or jobIdValue == "" then
+		jobIdValue = "Unavailable"
+	end
+
+	local gameName = "Unknown"
+	local creatorName = "Unknown"
+	if MarketplaceService then
+		local okInfo, infoResult = pcall(MarketplaceService.GetProductInfo, MarketplaceService, placeId)
+		if okInfo and type(infoResult) == "table" then
+			gameName = infoResult.Name or gameName
+			if infoResult.Creator and infoResult.Creator.Name then
+				creatorName = infoResult.Creator.Name
+			end
+		end
+	end
+
+	snapshot.game.name = gameName
+	snapshot.game.creator = creatorName
+
+	snapshot.ids.placeId = placeId ~= 0 and tostring(placeId) or "Unknown"
+	local gameIdText = tostring(gameId)
+	if gameIdText == "" or gameIdText == "0" then
+		gameIdText = "Unknown"
+	end
+	snapshot.ids.gameId = gameIdText
+	snapshot.ids.jobId = tostring(jobIdValue)
+
+	local playerCount = Players and Players.NumPlayers or 0
+	local maxPlayers = Players and Players.MaxPlayers or 0
+	snapshot.server.playerCount = string.format("%d/%d", playerCount, maxPlayers)
+
+	local isTesting = getgenv and getgenv().NATestingVer
+	local aprilMode = getgenv and getgenv().ActivateAprilMode
+
+	snapshot.flags.version = isTesting and "Testing" or "Normal"
+	snapshot.flags.aprilFools = aprilMode and "Enabled" or "Disabled"
+
+	snapshot.timestamp = os.date("%m/%d/%Y | %H:%M:%S")
+
+	return snapshot
+end
 cmdNAnum=0
 NAQoTEnabled = nil
 NAiconSaveEnabled = nil
-NAUISTROKER = Color3.fromRGB(148, 93, 255)
+NAUISTROKER = DEFAULT_UI_STROKE_COLOR
 NATOPBARVISIBLE = true
+
+if getgenv().NATestingVer then
+	opt.loaderUrl = "https://raw.githubusercontent.com/ltseverydayyou/Nameless-Admin/main/NA%20testing.lua"
+	opt.githubUrl="https://api.github.com/repos/ltseverydayyou/Nameless-Admin/commits?path=NA%20testing.lua"
+	opt.NAUILOADER="https://raw.githubusercontent.com/ltseverydayyou/Nameless-Admin/refs/heads/main/NAUITEST.lua"
+else
+	opt.loaderUrl = "https://raw.githubusercontent.com/ltseverydayyou/Nameless-Admin/main/Source.lua"
+	opt.githubUrl="https://api.github.com/repos/ltseverydayyou/Nameless-Admin/commits?path=Source.lua"
+	opt.NAUILOADER="https://raw.githubusercontent.com/ltseverydayyou/Nameless-Admin/refs/heads/main/NAUI.lua"
+end
 
 NAlib.connect = function(name, connection)
 	connections[name] = connections[name] or {}
@@ -725,19 +3982,6 @@ NAmanage.setAutoSkipPreference = function(enabled)
 		NACaller(writefile, state.settingsPath, encoded)
 	end
 end
-
-pcall(function()
-	repeat
-		Wait(0.1)
-		local okFetch, raw = pcall(game.HttpGet, game, "https://raw.githubusercontent.com/ltseverydayyou/uuuuuuu/refs/heads/main/NA%20stuff.json")
-		if okFetch then
-			local okDecode, decoded = pcall(HttpService.JSONDecode, HttpService, raw)
-			if okDecode and type(decoded) == "table" then
-				NAStuff.NAjson = decoded
-			end
-		end
-	until NAStuff.NAjson
-end)
 
 function rStringgg()
 	local length = math.random(10, 20)
@@ -930,9 +4174,6 @@ NAgui.dragger = function(ui, dragui)
 			local newYScale = startPos.Y.Scale + (startPos.Y.Offset + delta.Y) / screenSize.Y
 			ui.Position = UDim2.new(newXScale, 0, newYScale, 0)
 		end)
-		if not success then
-			warn("[Dragger] update error:", err)
-		end
 	end
 
 	NACaller(function()
@@ -950,12 +4191,10 @@ NAgui.dragger = function(ui, dragui)
 									dragging = false
 								end
 							end)
-							if not ok then warn("[Dragger] input.Changed error:", innerErr) end
 						end)
 					end)
 				end
 			end)
-			if not success then warn("[Dragger] InputBegan error:", err) end
 		end)
 	end)
 
@@ -966,7 +4205,6 @@ NAgui.dragger = function(ui, dragui)
 					dragInput = input
 				end
 			end)
-			if not success then warn("[Dragger] InputChanged error:", err) end
 		end)
 	end)
 
@@ -977,13 +4215,11 @@ NAgui.dragger = function(ui, dragui)
 					update(input)
 				end
 			end)
-			if not success then warn("[Dragger] UserInputService.InputChanged error:", err) end
 		end)
 	end)
 
 	pcall(function() ui.Active=true end)
 	pcall(function() dragui.Active=true end)
-	if not success then warn("[Dragger] Set Active error:", err) end
 end
 
 NAgui.draggerV2 = function(ui, dragui)
@@ -1016,7 +4252,6 @@ NAgui.draggerV2 = function(ui, dragui)
 			local ny = safeClamp(startY + dy, minY, maxY)
 			ui.Position = UDim2.new(nx / p.X, 0, ny / p.Y, 0)
 		end)
-		if not ok then warn("[DraggerV2] update error:", err) end
 	end
 
 	NAlib.connect(connName, dragui.InputBegan:Connect(function(input)
@@ -1029,12 +4264,10 @@ NAgui.draggerV2 = function(ui, dragui)
 					local ok2, err2 = NACaller(function()
 						if input.UserInputState == Enum.UserInputState.End then dragging = false end
 					end)
-					if not ok2 then warn("[DraggerV2] input.Changed error:", err2) end
 				end)
 				NAlib.connect(connName, c)
 			end
 		end)
-		if not ok then warn("[DraggerV2] InputBegan error:", err) end
 	end))
 
 	NAlib.connect(connName, dragui.InputChanged:Connect(function(input)
@@ -1043,14 +4276,12 @@ NAgui.draggerV2 = function(ui, dragui)
 				dragInput = input
 			end
 		end)
-		if not ok then warn("[DraggerV2] InputChanged error:", err) end
 	end))
 
 	NAlib.connect(connName, UserInputService.InputChanged:Connect(function(input)
 		local ok, err = NACaller(function()
 			if input == dragInput and dragging then update(input) end
 		end)
-		if not ok then warn("[DraggerV2] UserInputService.InputChanged error:", err) end
 	end))
 
 	local function onScreenSizeChanged()
@@ -1100,11 +4331,11 @@ NAmanage.createLoadingUI=function(text, opts)
 	}
 	opts = opts or {}
 	local widthScale = tonumber(opts.widthScale) or 0.34
-	local blacklist = opts.blacklist or { [3101266219] = true, [8523781134] = true }
+	local blacklist = opts.blacklist or { [8523781134] = true, [2521585756] = true }
 	local lp = services.Players and services.Players.LocalPlayer
 
 	if lp and blacklist[lp.UserId] then
-		local blockedGui = InstanceNew("ScreenGui")
+		--[[local blockedGui = InstanceNew("ScreenGui")
 		blockedGui.IgnoreGuiInset = true
 		blockedGui.ResetOnSpawn = false
 		blockedGui.DisplayOrder = 2147483647
@@ -1145,10 +4376,8 @@ NAmanage.createLoadingUI=function(text, opts)
 		desc.TextColor3 = Color3.fromRGB(230, 230, 240)
 		desc.TextScaled = true
 		desc.TextWrapped = true
-		desc.Text = "you are banned from using "..(adminName or "Nameless Admin")
-		while true do
-			Wait(1)
-		end
+		desc.Text = "you are banned from using "..(adminName or "Nameless Admin")]]
+		return 'womp womp'
 	end
 
 	ui.sg = InstanceNew("ScreenGui")
@@ -1576,7 +4805,6 @@ NAAssetsLoading.remoteStatus = {}
 NAAssetsLoading.knownRemotes = {
 	{url="https://api.github.com/repos/ltseverydayyou/Nameless-Admin/commits?path=NA%20testing.lua"; skip=true};
 	{url="https://api.github.com/repos/ltseverydayyou/Nameless-Admin/commits?path=Source.lua"; skip=true};
-	{url="https://raw.githubusercontent.com/luau/SynSaveInstance/main/"; skip=true};
 }
 
 NAAssetsLoading.getRemoteTargets=function()
@@ -1636,6 +4864,52 @@ NAAssetsLoading.prefetchRemotes=function(onStep, shouldSkip)
 	end
 end
 
+NAAssetsLoading.normalizeStatusError = function(text)
+	local err = tostring(text or "unknown error")
+	err = err:gsub("%s+", " ")
+	err = err:gsub("[%c]", " ")
+	if #err > 180 then
+		err = err:sub(1, 177).."..."
+	end
+	return err
+end
+
+NAAssetsLoading.runLoadingCheck = function(statusLabel, attemptFn, onSuccess)
+	local attempt = 0
+	while true do
+		if NAAssetsLoading.getSkip and NAAssetsLoading.getSkip() then
+			return nil
+		end
+		attempt += 1
+		local attemptLabel = attempt == 1 and statusLabel or Format("%s (retry %d)", statusLabel, attempt)
+		if NAAssetsLoading.setStatus then
+			NAAssetsLoading.setStatus(attemptLabel)
+		end
+		local success, result, errMsg = attemptFn()
+		if success then
+			if onSuccess then
+				pcall(onSuccess, result)
+			end
+			return result
+		end
+		if NAAssetsLoading.setStatus then
+			local errText = NAAssetsLoading.normalizeStatusError(errMsg or result) or tostring(errMsg or result)
+			NAAssetsLoading.setStatus(Format("%s error #%d: %s", statusLabel, attempt, errText))
+		end
+		if NAAssetsLoading.getSkip and NAAssetsLoading.getSkip() then
+			return nil
+		end
+		Wait(0.4)
+	end
+end
+
+NAAssetsLoading.cachePrefetchedRemote = function(url, body)
+	if type(url) == "string" and url ~= "" and type(body) == "string" and body ~= "" then
+		NAStuff._prefetchedRemotes = NAStuff._prefetchedRemotes or {}
+		NAStuff._prefetchedRemotes[url] = body
+	end
+end
+
 
 NAmanage.getPrefetchedRemote=function(url)
 	return (NAStuff._prefetchedRemotes and NAStuff._prefetchedRemotes[url]) or nil
@@ -1668,7 +4942,152 @@ until Notification or NAAssetsLoading.getSkip()
 if not Notification then
 	Notification = {Notify=function() end, Window=function() end, Popup=function() end}
 end
+NAmanage.Notification = Notification
 NAAssetsLoading.setPercent(0.22)
+
+NAAssetsLoading.setStatus("Loading Assets")
+local assetsReady = false
+repeat
+	local ok, res = pcall(function()
+		if not FileSupport then
+			return true
+		end
+		if type(NAImageAssets) ~= "table" then
+			return true
+		end
+		if type(isfolder) == "function" and not isfolder(NAfiles.NAASSETSFILEPATH) then
+			if type(makefolder) == "function" then
+				makefolder(NAfiles.NAASSETSFILEPATH)
+			end
+		end
+		if type(isfile) ~= "function" then
+			return true
+		end
+		for _, fileName in pairs(NAImageAssets) do
+			if type(fileName) == "string" and fileName ~= "" then
+				local fullPath = NAfiles.NAASSETSFILEPATH.."/"..fileName
+				if not isfile(fullPath) then
+					local data = game:HttpGet("https://raw.githubusercontent.com/ltseverydayyou/Nameless-Admin/main/NAimages/"..fileName)
+					if type(data) ~= "string" or data == "" then
+						return false
+					end
+					if type(writefile) ~= "function" then
+						return false
+					end
+					writefile(fullPath, data)
+				end
+			end
+		end
+		return true
+	end)
+	if ok and res then
+		assetsReady = true
+	else
+		Wait(0.25)
+	end
+until assetsReady or NAAssetsLoading.getSkip()
+NAAssetsLoading.setPercent(0.26)
+
+NAAssetsLoading.setStatus("Loading "..(adminName or "NA").." Data")
+local naStuffReady = false
+repeat
+	local ok, res = pcall(function()
+		local raw = game:HttpGet("https://raw.githubusercontent.com/ltseverydayyou/uuuuuuu/refs/heads/main/NA%20stuff.json")
+		local decoded = HttpService:JSONDecode(raw)
+		return decoded
+	end)
+	if ok and type(res) == "table" then
+		NAStuff.NAjson = res
+		NAmanage.btUpdate()
+		naStuffReady = true
+	else
+		Wait(0.25)
+	end
+until naStuffReady or NAAssetsLoading.getSkip()
+NAAssetsLoading.setPercent(0.30)
+
+NAAssetsLoading.runLoadingCheck("Setting Up Loader", function()
+	if type(opt.loaderUrl) ~= "string" or opt.loaderUrl == "" then
+		return false, nil, "missing loader url"
+	end
+	local ok, body = pcall(game.HttpGet, game, opt.loaderUrl)
+	if not ok then
+		return false, nil, body
+	end
+	if type(body) ~= "string" or body == "" then
+		return false, nil, "empty response"
+	end
+	return true, body
+end, function(body)
+	NAAssetsLoading.cachePrefetchedRemote(opt.loaderUrl, body)
+end)
+NAAssetsLoading.setPercent(0.32)
+
+NAAssetsLoading.runLoadingCheck("Loading Update Log", function()
+	if type(opt.githubUrl) ~= "string" or opt.githubUrl == "" then
+		return false, nil, "missing github url"
+	end
+	if type(opt.NAREQUEST) == "function" then
+		local ok, response = pcall(opt.NAREQUEST, {
+			Url = opt.githubUrl,
+			Method = "GET"
+		})
+		if not ok then
+			return false, nil, response
+		end
+		if typeof(response) ~= "table" then
+			return false, nil, "invalid response"
+		end
+		local statusCode = tonumber(response.StatusCode)
+		if statusCode ~= 200 then
+			return false, nil, Format("http %s", tostring(statusCode or "nil"))
+		end
+		if type(response.Body) ~= "string" or response.Body == "" then
+			return false, nil, "empty body"
+		end
+		return true, response.Body
+	end
+	local ok, body = pcall(game.HttpGet, game, opt.githubUrl)
+	if not ok then
+		return false, nil, body
+	end
+	if type(body) ~= "string" or body == "" then
+		return false, nil, "empty response"
+	end
+	return true, body
+end, function(body)
+	NAStuff._githubMetadata = body
+	local decodeOk, decoded = pcall(HttpService.JSONDecode, HttpService, body)
+	if decodeOk and type(decoded) == "table" then
+		NAStuff._githubCommits = decoded
+		local top = decoded[1]
+		local date = top and top.commit and top.commit.author and top.commit.author.date
+		if type(date) == "string" then
+			local year, month, day = date:match("(%d+)-(%d+)-(%d+)")
+			if year and month and day then
+				opt.NAupdDate = month.."/"..day.."/"..year
+			end
+		end
+	end
+end)
+NAAssetsLoading.setPercent(0.34)
+
+NAAssetsLoading.runLoadingCheck("Loading UI", function()
+	if type(opt.NAUILOADER) ~= "string" or opt.NAUILOADER == "" then
+		return false, nil, "missing UI loader url"
+	end
+	local ok, body = pcall(game.HttpGet, game, opt.NAUILOADER)
+	if not ok then
+		return false, nil, body
+	end
+	if type(body) ~= "string" or body == "" then
+		return false, nil, "empty response"
+	end
+	return true, body
+end, function(body)
+	NAAssetsLoading.cachePrefetchedRemote(opt.NAUILOADER, body)
+end)
+NAAssetsLoading.setPercent(0.36)
 
 NAAssetsLoading.setStatus("collecting remote resources")
 local remoteTargets = NAAssetsLoading.getRemoteTargets()
@@ -1678,10 +5097,10 @@ if totalRemotes > 0 then
 else
 	NAAssetsLoading.setStatus("queued 0 remote resources")
 end
-NAAssetsLoading.setPercent(0.32)
+NAAssetsLoading.setPercent(0.38)
 
 NAAssetsLoading.setStatus("prefetching remote resources")
-local base, span = 0.32, 0.62
+local base, span = 0.38, 0.56
 NAAssetsLoading.prefetchRemotes(function(done, total, url, success)
 	local fraction = (total > 0 and (done / total)) or 1
 	local progress = base + span * fraction
@@ -1700,21 +5119,52 @@ Notify = Notification.Notify
 Window = Notification.Window
 Popup  = Notification.Popup
 
+local function cloneTable(tbl)
+	local copy = {}
+	for k, v in pairs(tbl) do
+		copy[k] = v
+	end
+	return copy
+end
+
+local function buildNotifArgs(input, duration, title, allowDurationDefault)
+	local args = type(input) == "table" and cloneTable(input) or {}
+	if type(input) ~= "table" then
+		args.Description = tostring((input ~= nil and input) or "something")
+	elseif args.Description == nil then
+		args.Description = "something"
+	end
+	local resolvedTitle = title or adminName
+	if resolvedTitle and args.Title == nil then
+		args.Title = resolvedTitle
+	end
+	if allowDurationDefault or duration ~= nil then
+		if args.Duration == nil then
+			if duration ~= nil then
+				args.Duration = duration
+			elseif allowDurationDefault then
+				args.Duration = 5
+			end
+		end
+	end
+	return args
+end
+
 function DoNotif(text, duration, title)
-	Notify({ Title = title or adminName or nil, Description = text or "something", Duration = duration or 5 })
+	Notify(buildNotifArgs(text, duration, title, true))
 end
 
 function DebugNotif(text, duration, title)
 	if not NAStuff.nuhuhNotifs then return end
-	Notify({ Title = title or adminName or nil, Description = text or "something", Duration = duration or 5 })
+	Notify(buildNotifArgs(text, duration, title, true))
 end
 
 function DoWindow(text, title)
-	Window({ Title = title or adminName or nil, Description = text or "something" })
+	Window(buildNotifArgs(text, nil, title, false))
 end
 
 function DoPopup(text, title)
-	Popup({ Title = title or adminName or nil, Description = text or "something" })
+	Popup(buildNotifArgs(text, nil, title, false))
 end
 
 local mouse=SafeGetService("Players").LocalPlayer:GetMouse()
@@ -1917,62 +5367,10 @@ local JoinLeaveConfig = {
 	LeaveLog = false;
 	SaveLog = false;
 }
-local opt={
-	prefix=prefixCheck;
-	NAupdDate='unknown'; --month,day,year
-	githubUrl = '';
-	loader='';
-	NAUILOADER='';
-	NAAUTOSCALER=nil;
-	NA_storage=nil;--Stupid Ahh script removing folders
-	NAREQUEST = request or http_request or (syn and syn.request) or function() end;
-	queueteleport=(syn and syn.queue_on_teleport) or queue_on_teleport or (fluxus and fluxus.queue_on_teleport) or function() end;
-	hiddenprop=(sethiddenproperty or set_hidden_property or set_hidden_prop) or function() end;
-	ctrlModule = nil;
-	currentTagText = "Tag";
-	currentTagColor = Color3.fromRGB(0, 255, 170);
-	currentTagRGB = false;
-	--saveTag = false;
-}
 
-if getgenv().NATestingVer then
-	opt.loader=[[loadstring(game:HttpGet("https://raw.githubusercontent.com/ltseverydayyou/Nameless-Admin/main/NA%20testing.lua"))();]]
-	opt.githubUrl="https://api.github.com/repos/ltseverydayyou/Nameless-Admin/commits?path=NA%20testing.lua"
-	opt.NAUILOADER="https://raw.githubusercontent.com/ltseverydayyou/Nameless-Admin/refs/heads/main/NAUITEST.lua"
-else
-	opt.loader=[[loadstring(game:HttpGet("https://raw.githubusercontent.com/ltseverydayyou/Nameless-Admin/main/Source.lua"))();]]
-	opt.githubUrl="https://api.github.com/repos/ltseverydayyou/Nameless-Admin/commits?path=Source.lua"
-	opt.NAUILOADER="https://raw.githubusercontent.com/ltseverydayyou/Nameless-Admin/refs/heads/main/NAUI.lua"
-end
+opt.loader = Format('loadstring(game:HttpGet("%s"))();', opt.loaderUrl or "")
 
 --Custom file functions checker checker
-local NAfiles = {
-	NAFILEPATH = "Nameless-Admin";
-	NAWAYPOINTFILEPATH = "Nameless-Admin/Waypoints";
-	NAPLUGINFILEPATH = "Nameless-Admin/Plugins";
-	NAASSETSFILEPATH = "Nameless-Admin/Assets";
-	NAMAINSETTINGSPATH = "Nameless-Admin/Settings.json";
-	NAPREFIXPATH = "Nameless-Admin/Prefix.txt";
-	NABUTTONSIZEPATH = "Nameless-Admin/ButtonSize.txt";
-	NAUISIZEPATH = "Nameless-Admin/UIScale.txt";
-	NAQOTPATH = "Nameless-Admin/QueueOnTeleport.txt";
-	NAALIASPATH = "Nameless-Admin/Aliases.json";
-	NAICONPOSPATH = "Nameless-Admin/IconPosition.json";
-	NAUSERBUTTONSPATH = "Nameless-Admin/UserButtons.json";
-	NAAUTOEXECPATH = "Nameless-Admin/AutoExecCommands.json";
-	NAPREDICTIONPATH = "Nameless-Admin/Prediction.txt";
-	NASTROKETHINGY = "Nameless-Admin/NAUIStroker.txt";
-	NAJOINLEAVE = "Nameless-Admin/JoinLeave.json";
-	NAJOINLEAVELOG = "Nameless-Admin/JoinLeaveLog.txt";
-	NACHATLOGS = "Nameless-Admin/ChatLogs.txt";
-	--NACHATTAG = "Nameless-Admin/ChatTag.json";
-	NATOPBAR = "Nameless-Admin/TopBarApp.txt";
-	NANOTIFSTOGGLE = "Nameless-Admin/NotifsTgl.txt";
-	NABINDERS = "Nameless-Admin/Binders.json";
-	NAESPSETTINGSPATH = "Nameless-Admin/ESPSettings.json";
-	NATOPBARMODE = "Nameless-Admin/TopbarMode.txt";
-	NATEXTCHATSETTINGSPATH = "Nameless-Admin/TextChatSettings.json";
-}
 NAmanage.loaderState.settingsPath = NAfiles.NAMAINSETTINGSPATH
 NAUserButtons = {}
 UserButtonGuiList = {}
@@ -2184,6 +5582,31 @@ NAmanage.NASettingsGetSchema=function()
 				return coerceBoolean(value, true)
 			end;
 		};
+		bloxtrapRPC = {
+			default = false;
+			coerce = function(value)
+				return coerceBoolean(value, false)
+			end;
+		};
+		chatTranslate = {
+			default = true;
+			coerce = function(value)
+				return coerceBoolean(value, true)
+			end;
+		};
+		chatTranslateTarget = {
+			default = "en";
+			coerce = function(value)
+				if type(value) ~= "string" then
+					value = tostring(value or "en")
+				end
+				value = value:lower()
+				if value == "" then
+					return "en"
+				end
+				return value
+			end;
+		};
 		uiStroke = {
 			pathKey = "NASTROKETHINGY";
 			default = function()
@@ -2232,6 +5655,72 @@ NAmanage.NASettingsGetSchema=function()
 				}
 			end;
 		};
+		colorPickerAutoRGB = {
+			default = function()
+				return {}
+			end;
+			coerce = function(value)
+				if type(value) ~= "table" then
+					value = {}
+				end
+				local sanitized = {}
+				for key, val in pairs(value) do
+					if type(key) == "string" then
+						sanitized[key] = val == true
+					end
+				end
+				return sanitized
+			end;
+		};
+		customIconAssetId = {
+			default = "";
+			coerce = function(value)
+				if typeof(value) ~= "string" then
+					value = tostring(value or "")
+				end
+				value = value:match("^%s*(.-)%s*$")
+				if value == "" then
+					return ""
+				end
+				local digits = value:match("^rbxassetid://(%d+)$") or value:match("(%d+)$")
+				if digits then
+					return "rbxassetid://"..digits
+				end
+				return ""
+			end;
+		};
+		customIconEnabled = {
+			default = false;
+			coerce = function(value)
+				if type(value) == "boolean" then return value end
+				if type(value) == "string" then
+					local lowered = value:lower()
+					if lowered == "true" or lowered == "1" then return true end
+					if lowered == "false" or lowered == "0" then return false end
+				end
+				if type(value) == "number" then return value ~= 0 end
+				return false
+			end;
+		};
+		iconInvisible = {
+			default = false;
+			coerce = function(value)
+				return coerceBoolean(value, false)
+			end;
+		};
+		iconLocked = {
+			default = false;
+			coerce = function(value)
+				if type(value) == "boolean" then return value end
+				if type(value) == "string" then
+					local v = value:lower()
+					if v == "true" or v == "1" then return true end
+					if v == "false" or v == "0" then return false end
+				end
+				if type(value) == "number" then return value ~= 0 end
+				return false
+			end;
+		};
 		topbarVisible = {
 			pathKey = "NATOPBAR";
 			default = true;
@@ -2244,6 +5733,31 @@ NAmanage.NASettingsGetSchema=function()
 			default = false;
 			coerce = function(value)
 				return coerceBoolean(value, false)
+			end;
+		};
+		devConsoleFilters = {
+			default = function()
+				return {
+					Output = true;
+					Info = true;
+					Warn = true;
+					Error = true;
+				}
+			end;
+			coerce = function(value)
+				local result = {
+					Output = true;
+					Info = true;
+					Warn = true;
+					Error = true;
+				}
+				if typeof(value) == "table" then
+					result.Output = coerceBoolean(value.Output, result.Output)
+					result.Info = coerceBoolean(value.Info, result.Info)
+					result.Warn = coerceBoolean(value.Warn, result.Warn)
+					result.Error = coerceBoolean(value.Error, result.Error)
+				end
+				return result
 			end;
 		};
 		autoSkipLoading = {
@@ -2431,7 +5945,7 @@ function InitUIStroke()
 	local defaultColor = Color3.fromRGB(148, 93, 255)
 
 	if not FileSupport then
-		DoNotif("UI Stroke defaulted: no file support")
+		DoNotif("Main Color defaulted: no file support")
 		return defaultColor
 	end
 
@@ -2450,7 +5964,7 @@ function InitUIStroke()
 		G = defaultColor.G;
 		B = defaultColor.B;
 	})
-	DoNotif("UI Stroke color reset to default due to invalid or missing data.")
+	DoNotif("Main Color reset to default due to invalid or missing data.")
 	return defaultColor
 end
 
@@ -2624,6 +6138,188 @@ NAmanage.SaveBinders=function()
 	end
 end
 
+originalIO.deepCopyTable=function(value)
+	if type(value) ~= "table" then return value end
+	local copy = {}
+	for k, v in pairs(value) do
+		copy[k] = originalIO.deepCopyTable(v)
+	end
+	return copy
+end
+
+originalIO.safeDeleteFile=function(path)
+	if type(path) ~= "string" then
+		return false, "Invalid file path."
+	end
+	if not (delfile and isfile) then
+		return false, "File deletion not supported by this executor."
+	end
+	if not isfile(path) then
+		return true, "File already removed."
+	end
+	local ok, err = pcall(delfile, path)
+	if not ok then
+		return false, err or "Failed to delete file."
+	end
+	return true, "File deleted."
+end
+
+originalIO.safeClearFolder=function(path, opts)
+	opts = opts or {}
+	if type(path) ~= "string" then
+		return false, "Invalid folder path."
+	end
+	if not (isfolder and listfiles and makefolder) then
+		return false, "Folder operations not supported by this executor."
+	end
+	if not isfolder(path) then
+		return true, "Folder already removed."
+	end
+
+	local okList, entries = pcall(listfiles, path)
+	if okList and type(entries) == "table" then
+		for _, entry in ipairs(entries) do
+			if isfolder(entry) then
+				local okSub, errSub = originalIO.safeClearFolder(entry, { removeRoot = true })
+				if not okSub then
+					return false, errSub
+				end
+				if delfolder then
+					local okDel, errDel = pcall(delfolder, entry)
+					if not okDel then
+						return false, errDel or ("Failed to remove "..entry)
+					end
+				end
+			else
+				if isfile and isfile(entry) then
+					local okDel, errDel = pcall(delfile, entry)
+					if not okDel then
+						return false, errDel or ("Failed to delete "..entry)
+					end
+				end
+			end
+		end
+	end
+
+	local removedRoot = false
+	if opts.removeRoot then
+		if delfolder then
+			local okDel, errDel = pcall(delfolder, path)
+			if not okDel then
+				return false, errDel or ("Failed to remove "..path)
+			end
+			removedRoot = true
+		end
+	end
+
+	if (opts.recreate or (opts.removeRoot and not removedRoot)) and makefolder then
+		local okMk, errMk = pcall(makefolder, path)
+		if not okMk then
+			return false, errMk or ("Failed to recreate "..path)
+		end
+	end
+
+	if opts.removeRoot and not removedRoot and not delfolder then
+		return true, "Cleared folder contents (folder kept; executor lacks delfolder)."
+	end
+	if removedRoot and opts.recreate then
+		return true, "Folder rebuilt."
+	elseif removedRoot then
+		return true, "Folder removed."
+	end
+	return true, "Folder cleared."
+end
+
+local SettingsCleanupItems = {
+	{ label = "Main Settings", path = NAfiles.NAMAINSETTINGSPATH, kind = "file", displayType = "json", success = "Main settings deleted." },
+	{ label = "Aliases", path = NAfiles.NAALIASPATH, kind = "file", displayType = "json", success = "Alias list deleted." },
+	{ label = "User Buttons", path = NAfiles.NAUSERBUTTONSPATH, kind = "file", displayType = "json", success = "User buttons reset." },
+	{ label = "AutoExec Commands", path = NAfiles.NAAUTOEXECPATH, kind = "file", displayType = "json", success = "AutoExec commands cleared." },
+	{ label = "Binders", path = NAfiles.NABINDERS, kind = "file", displayType = "json", success = "Binders file deleted." },
+	{ label = "Join/Leave Settings", path = NAfiles.NAJOINLEAVE, kind = "file", displayType = "json", success = "Join/Leave settings deleted." },
+	{ label = "Join/Leave Log", path = NAfiles.NAJOINLEAVELOG, kind = "file", displayType = "txt", success = "Join/Leave log cleared." },
+	{ label = "Chat Logs", path = NAfiles.NACHATLOGS, kind = "file", displayType = "txt", success = "Chat logs cleared." },
+	{ label = "Icon Position", path = NAfiles.NAICONPOSPATH, kind = "file", displayType = "json", success = "Icon position reset." },
+	{ label = "ESP Settings", path = NAfiles.NAESPSETTINGSPATH, kind = "file", displayType = "json", success = "ESP settings deleted." },
+	{ label = "Topbar Layout", path = NAfiles.NATOPBAR, kind = "file", displayType = "txt", success = "Topbar layout reset." },
+	{ label = "Notification Toggle", path = NAfiles.NANOTIFSTOGGLE, kind = "file", displayType = "txt", success = "Notification toggle reset." },
+	{ label = "Text Chat Settings", path = NAfiles.NATEXTCHATSETTINGSPATH, kind = "file", displayType = "json", success = "Text chat settings deleted." },
+	{ label = "Waypoints", path = NAfiles.NAWAYPOINTFILEPATH, kind = "folder", displayType = "folder", removeRoot = true, recreate = true, success = "Waypoints folder cleared." },
+	{ label = "Plugins", path = NAfiles.NAPLUGINFILEPATH, kind = "folder", displayType = "folder", removeRoot = true, recreate = true, success = "Plugins folder cleared." },
+	{ label = "Assets Cache", path = NAfiles.NAASSETSFILEPATH, kind = "folder", displayType = "folder", removeRoot = true, recreate = true, success = "Assets cache cleared." },
+	{ label = "All Saved Data", path = NAfiles.NAFILEPATH, kind = "folder", displayType = "folder", removeRoot = true, recreate = true, success = "Nameless-Admin folder cleared." },
+}
+
+function NAmanage.buildSettingsCleanupButtons()
+	local buttons = {}
+	if not FileSupport then
+		return buttons
+	end
+
+	for _, entry in ipairs(SettingsCleanupItems) do
+		local exists = false
+		if entry.kind == "file" then
+			exists = isfile and isfile(entry.path)
+		elseif entry.kind == "folder" then
+			exists = listfiles and isfolder and isfolder(entry.path)
+		end
+
+		if exists then
+			local opt = entry
+			local buttonText = Format("%s (%s)", opt.label, opt.displayType or opt.kind)
+			Insert(buttons, {
+				Text = buttonText,
+				Callback = function()
+					local ok, info
+					if opt.kind == "file" then
+						ok, info = originalIO.safeDeleteFile(opt.path)
+					else
+						ok, info = originalIO.safeClearFolder(opt.path, { removeRoot = opt.removeRoot, recreate = opt.recreate })
+					end
+
+					if ok then
+						DoNotif(opt.success or info or Format("%s removed.", opt.label), 3)
+						if type(opt.after) == "function" then
+							pcall(opt.after)
+						end
+					else
+						DoNotif(opt.failure or Format("Failed to remove %s: %s", opt.label, tostring(info)), 4)
+					end
+				end,
+			})
+		end
+	end
+
+	return buttons
+end
+
+function NAmanage.openSettingsCleanupPopup()
+	if not FileSupport then
+		DoNotif("File support is required to delete saved settings.", 3)
+		return
+	end
+	if type(Popup) ~= "function" then
+		DoNotif("Popup UI is unavailable in this session.", 3)
+		return
+	end
+
+	local buttons = NAmanage.buildSettingsCleanupButtons()
+	if #buttons == 0 then
+		DoNotif("No saved Nameless-Admin files or folders were found.", 3)
+		return
+	end
+
+	Popup({
+		Title = "Delete Saved Settings",
+		Description = "Select a saved file or folder to remove. This action cannot be undone.",
+		Duration = 0,
+		Buttons = buttons,
+	})
+end
+
+opt.chatTranslateEnabled = NAmanage.NASettingsGet("chatTranslate")
+opt.chatTranslateTarget = NAmanage.NASettingsGet("chatTranslateTarget")
+
 if FileSupport then
 	prefixCheck = NAmanage.NASettingsGet("prefix")
 	NAsavedScale = NAmanage.NASettingsGet("buttonSize")
@@ -2636,6 +6332,8 @@ if FileSupport then
 	end
 	doPREDICTION = NAmanage.NASettingsGet("prediction")
 	NAUISTROKER = InitUIStroke()
+	NAStuff.IconInvisible = NAmanage.NASettingsGet("iconInvisible")
+	NAStuff.IconLocked = NAmanage.NASettingsGet("iconLocked")
 	NATOPBARVISIBLE = NAmanage.NASettingsGet("topbarVisible")
 
 	if prefixCheck == "" or utf8.len(prefixCheck) > 1 or prefixCheck:match("[%w]")
@@ -2709,7 +6407,25 @@ if FileSupport then
 		local success, data = pcall(function()
 			return HttpService:JSONDecode(readfile(NAfiles.NAICONPOSPATH))
 		end)
-		if success and data then
+		if success and type(data) == "table" then
+			local rewrite = false
+			if type(data.X) == "number" then
+				local clampedX = math.clamp(data.X, 0, 1)
+				if clampedX ~= data.X then
+					data.X = clampedX
+					rewrite = true
+				end
+			end
+			if type(data.Y) == "number" then
+				local clampedY = math.clamp(data.Y, 0, 1)
+				if clampedY ~= data.Y then
+					data.Y = clampedY
+					rewrite = true
+				end
+			end
+			if rewrite then
+				pcall(writefile, NAfiles.NAICONPOSPATH, HttpService:JSONEncode(data))
+			end
 			if data.Save ~= nil then
 				NAiconSaveEnabled = data.Save
 			else
@@ -2774,9 +6490,10 @@ if FileSupport then
 		end
 	end
 
+	NAStuff.ChatSettingsTemplate = originalIO.deepCopyTable(NAStuff.ChatSettings)
+
 	local function loadChat()
-		local cfg = {}
-		deepMerge(cfg, NAStuff.ChatSettings)
+		local cfg = originalIO.deepCopyTable(NAStuff.ChatSettingsTemplate or NAStuff.ChatSettings)
 		if isfile(ChatConfigPath) then
 			local ok3, d = pcall(function() return HttpService:JSONDecode(readfile(ChatConfigPath)) end)
 			if ok3 and type(d)=="table" then deepMerge(cfg, d) end
@@ -2786,9 +6503,123 @@ if FileSupport then
 
 	NAStuff.ChatSettings = loadChat()
 
+	originalIO.getChatTemplateSection=function(section)
+		local template = NAStuff.ChatSettingsTemplate
+		if type(template) ~= "table" then return nil end
+		return template[section]
+	end
+
+	originalIO.assignChatSectionFromTemplate=function(section)
+		local defaults = originalIO.getChatTemplateSection(section)
+		if defaults == nil then return false end
+		if type(defaults) == "table" then
+			NAStuff.ChatSettings[section] = originalIO.deepCopyTable(defaults)
+		else
+			NAStuff.ChatSettings[section] = defaults
+		end
+		return true
+	end
+
+	originalIO.ensureChatCustomBackup=function()
+		if type(NAStuff.ChatSettingsCustomBackup) ~= "table" then
+			NAStuff.ChatSettingsCustomBackup = {}
+		end
+		return NAStuff.ChatSettingsCustomBackup
+	end
+
+	originalIO.backupChatSection=function(section)
+		if type(NAStuff.ChatSettings) ~= "table" then return end
+		local current = NAStuff.ChatSettings[section]
+		if current == nil then return end
+		local backup = originalIO.ensureChatCustomBackup()
+		if type(current) == "table" then
+			backup[section] = originalIO.deepCopyTable(current)
+		else
+			backup[section] = current
+		end
+	end
+
+	originalIO.restoreChatSectionFromBackup=function(section)
+		local backup = NAStuff.ChatSettingsCustomBackup
+		if type(backup) ~= "table" then return false end
+		local saved = backup[section]
+		if saved == nil then return false end
+		if type(saved) == "table" then
+			NAStuff.ChatSettings[section] = originalIO.deepCopyTable(saved)
+		else
+			NAStuff.ChatSettings[section] = saved
+		end
+		return true
+	end
+
 	NAmanage.SaveTextChatSettings = function()
 		local ok4, json = pcall(function() return HttpService:JSONEncode(NAStuff.ChatSettings) end)
 		if ok4 then pcall(writefile, ChatConfigPath, json) end
+		if NAmanage.SyncChatSettingsUI then
+			NAmanage.SyncChatSettingsUI()
+		end
+	end
+
+	NAmanage.SyncChatSettingsUI = function(opts)
+		opts = opts or {}
+		local shouldFire = opts.fire == true
+		local chat = NAStuff.ChatSettings
+		if type(chat) ~= "table" then return end
+
+		local window = chat.window or {}
+		local tabs = chat.tabs or {}
+		local input = chat.input or {}
+		local bubbles = chat.bubbles or {}
+
+		local function setToggle(label, value)
+			if not NAgui.setToggleState then return end
+			NAgui.setToggleState(label, value and true or false, { force = true, fire = shouldFire and true or false })
+		end
+
+		local function setSlider(label, value)
+			if value == nil or not NAgui.setSliderValue then return end
+			if type(value) ~= "number" then return end
+			NAgui.setSliderValue(label, value, { force = true, fire = shouldFire and true or false })
+		end
+
+		local function setColor(label, value)
+			if value == nil or not NAgui.setColorPickerValue then return end
+			local ok, color = pcall(tblToC3, value)
+			if not ok or typeof(color) ~= "Color3" then return end
+			NAgui.setColorPickerValue(label, color, { fire = shouldFire and true or false })
+		end
+
+		setToggle("Enable Custom Chat Styling", chat.customEnabled)
+		setToggle("Enable Chat (CoreGui)", chat.coreGuiChat)
+		setToggle("Window Enabled", window.enabled)
+		setToggle("Tabs Enabled", tabs.enabled)
+		setToggle("Input Enabled", input.enabled)
+		setToggle("Autocomplete", input.autocomplete)
+		setToggle("Target #RBXGeneral", input.targetGeneral)
+		setToggle("Bubbles Enabled", bubbles.enabled)
+		setToggle("Tail Visible", bubbles.tailVisible)
+
+		setSlider("Text Size (Window)", window.textSize)
+		setSlider("Text Stroke Transparency", window.strokeTransparency)
+		setSlider("Window Background Transparency", window.backgroundTransparency)
+		setSlider("Text Size (Tabs)", tabs.textSize)
+		setSlider("Background Transparency (Tabs)", tabs.backgroundTransparency)
+		setSlider("Text Size (Input)", input.textSize)
+		setSlider("Text Stroke Transparency (Input)", input.strokeTransparency)
+		setSlider("Background Transparency (Input)", input.backgroundTransparency)
+		setSlider("Max Distance", bubbles.maxDistance)
+		setSlider("Minimize Distance", bubbles.minimizeDistance)
+		setSlider("Text Size (Bubble)", bubbles.textSize)
+		setSlider("Bubble Spacing", bubbles.spacing)
+		setSlider("Background Transparency (Bubble)", bubbles.backgroundTransparency)
+
+		setColor("Text Color", window.textColor)
+		setColor("Text Stroke Color", window.strokeColor)
+		setColor("Window Background", window.backgroundColor)
+		setColor("Text Color (Tabs)", tabs.textColor)
+		setColor("Selected Text Color", tabs.selectedTextColor)
+		setColor("Unselected Text Color", tabs.unselectedTextColor)
+		setColor("Text Color (Input)", input.textColor)
 	end
 
 	local function hasProp(inst, prop)
@@ -2808,6 +6639,64 @@ if FileSupport then
 		return nil
 	end
 
+	originalIO.getChatDefaults=function()
+		if not NAStuff.ChatSettingsDefaults then
+			NAStuff.ChatSettingsDefaults = {
+				window = {};
+				tabs = {};
+				input = {};
+				bubbles = {};
+			}
+		end
+		return NAStuff.ChatSettingsDefaults
+	end
+
+	originalIO.rememberChatDefault=function(group, inst, prop)
+		if not inst then return end
+		local defaults = originalIO.getChatDefaults()
+		local groupDefaults = defaults[group]
+		local info = groupDefaults[prop]
+		if info and info.source == inst then return end
+		if not hasProp(inst, prop) then return end
+		local ok, value = pcall(function() return inst[prop] end)
+		if not ok then return end
+		groupDefaults[prop] = { has = true, value = value, source = inst }
+	end
+
+	originalIO.captureChatDefaults=function(Window, Tabs, InputBar, Bubbles)
+		local function captureGroup(group, inst, props)
+			if not inst then return end
+			for _, prop in ipairs(props) do
+				originalIO.rememberChatDefault(group, inst, prop)
+			end
+		end
+
+		originalIO.getChatDefaults()
+		captureGroup("window", Window, { "Enabled", "FontFace", "TextSize", "TextColor3", "TextStrokeColor3", "TextStrokeTransparency", "BackgroundColor3", "BackgroundTransparency" })
+		captureGroup("tabs", Tabs, { "Enabled", "FontFace", "TextSize", "BackgroundTransparency", "TextColor3", "SelectedTabTextColor3", "UnselectedTabTextColor3" })
+		captureGroup("input", InputBar, { "Enabled", "AutocompleteEnabled", "FontFace", "TargetTextChannel", "KeyboardKeyCode", "TextSize", "TextColor3", "TextStrokeTransparency", "BackgroundTransparency" })
+		captureGroup("bubbles", Bubbles, { "Enabled", "MaxDistance", "MinimizeDistance", "TextSize", "BubblesSpacing", "BackgroundTransparency", "TailVisible" })
+	end
+
+	originalIO.applyChatDefaultGroup=function(group, inst)
+		local defaults = NAStuff.ChatSettingsDefaults
+		if not defaults or not inst then return end
+		local groupDefaults = defaults[group]
+		if not groupDefaults then return end
+		for prop, info in pairs(groupDefaults) do
+			if info and info.has then
+				safeSet(inst, prop, info.value)
+			end
+		end
+	end
+
+	originalIO.restoreChatDefaults=function(Window, Tabs, InputBar, Bubbles)
+		originalIO.applyChatDefaultGroup("window", Window)
+		originalIO.applyChatDefaultGroup("tabs", Tabs)
+		originalIO.applyChatDefaultGroup("input", InputBar)
+		originalIO.applyChatDefaultGroup("bubbles", Bubbles)
+	end
+
 	NAmanage.ApplyTextChatSettings = function()
 		pcall(function() StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Chat, NAStuff.ChatSettings.coreGuiChat) end)
 		local TCS = TextChatService
@@ -2816,6 +6705,17 @@ if FileSupport then
 		local InputBar = TCS:FindFirstChildOfClass("ChatInputBarConfiguration")
 		local Bubbles = TCS:FindFirstChildOfClass("BubbleChatConfiguration")
 		local Tabs = TCS:FindFirstChildOfClass("ChannelTabsConfiguration")
+
+		originalIO.captureChatDefaults(Window, Tabs, InputBar, Bubbles)
+
+		if not NAStuff.ChatSettings.customEnabled then
+			if NAStuff.ChatCustomizationActive ~= false then
+				originalIO.restoreChatDefaults(Window, Tabs, InputBar, Bubbles)
+			end
+			NAStuff.ChatCustomizationActive = false
+			return
+		end
+		NAStuff.ChatCustomizationActive = true
 
 		if Window then
 			safeSet(Window, "Enabled", NAStuff.ChatSettings.window.enabled)
@@ -2900,6 +6800,9 @@ else
 end
 
 opt.prefix = prefixCheck
+if NAmanage.SyncPrefixUI then
+	NAmanage.SyncPrefixUI()
+end
 
 local lastPrefix = opt.prefix
 
@@ -2908,41 +6811,6 @@ local lastPrefix = opt.prefix
 	SafeGetService("Players").LocalPlayer:SetAttribute("CustomNAtaggerColor", opt.currentTagColor)
 	SafeGetService("Players").LocalPlayer:SetAttribute("CustomNAtaggerRainbow", opt.currentTagRGB)
 end]]
-
-pcall(function()
-	local response = opt.NAREQUEST({
-		Url = opt.githubUrl,
-		Method = "GET"
-	})
-
-	if response and response.StatusCode == 200 then
-		local json = HttpService:JSONDecode(response.Body)
-		if json and json[1] and json[1].commit and json[1].commit.author and json[1].commit.author.date then
-			local year, month, day = json[1].commit.author.date:match("(%d+)-(%d+)-(%d+)")
-			opt.NAupdDate = month.."/"..day.."/"..year
-		end
-	end
-end)
-
-NACaller(function()
-	if not FileSupport then return end
-	if type(NAImageAssets) ~= "table" then return end
-
-	local baseURL = "https://raw.githubusercontent.com/ltseverydayyou/Nameless-Admin/main/NAimages/"
-	for _, fileName in pairs(NAImageAssets) do
-		local fullPath = NAfiles.NAASSETSFILEPATH.."/"..fileName
-		if not isfile(fullPath) then
-			local success, data = NACaller(function()
-				return game:HttpGet(baseURL..fileName)
-			end)
-			if success and data then
-				writefile(fullPath, data)
-			else
-				warn("[NA] Failed to download:", fileName)
-			end
-		end
-	end
-end)
 
 --[[ VARIABLES ]]--
 
@@ -2979,6 +6847,10 @@ if NAStuff._ctrlLockPersist == nil then NAStuff._ctrlLockPersist = false end
 NAStuff._ctrlLockList = NAStuff._ctrlLockList or {}
 NAStuff._ctrlLockSet  = NAStuff._ctrlLockSet  or {}
 
+NAmanage.IconSetInvisible = NAmanage.IconSetInvisible or function(hidden)
+	NAStuff.IconInvisible = hidden and true or false
+end
+
 --[[ Some more variables ]]--
 
 localPlayer=Player
@@ -2986,7 +6858,7 @@ LocalPlayer=Player
 local character=Player.Character
 local camera=workspace.CurrentCamera
 local player,plr,lp=Players.LocalPlayer,Players.LocalPlayer,Players.LocalPlayer
-local cmds={
+cmds={
 	Commands={};
 	Aliases={};
 	NASAVEDALIASES = {};
@@ -3214,15 +7086,20 @@ NAmanage.rebuildIndex=function()
 	for _,frame in ipairs(CMDAUTOFILL) do
 		local cmdName = frame.Name
 		local command = cmds.Commands[cmdName]
-		local displayInfo = command and command[2] and command[2][1] or ""
-		local lowerName = Lower(cmdName)
-		local searchable = NAmanage.stripMarkup(Lower(displayInfo))
+		local displayInfo = ""
 		local extra = {}
-		for group in displayInfo:gmatch("%(([^%)]+)%)") do
-			for alias in group:gmatch("[^,%s]+") do
-				Insert(extra,Lower(alias))
+		if command then
+			local updatedText, aliasList = fixStupidSearchGoober(cmdName, command)
+			if updatedText and type(command[2]) == "table" then
+				command[2][1] = updatedText
+			end
+			displayInfo = (command[2] and command[2][1]) or ""
+			for _, alias in ipairs(aliasList or {}) do
+				Insert(extra, alias)
 			end
 		end
+		local lowerName = Lower(cmdName)
+		local searchable = NAmanage.stripMarkup(Lower(displayInfo))
 		Insert(searchIndex,{
 			name = cmdName,
 			lowerName = lowerName,
@@ -3554,6 +7431,32 @@ LocalPlayer.OnTeleport:Connect(function(...)
 	end
 end)
 
+NAmanage.cloneArgsArray=function(source)
+	local out = {}
+	if source then
+		for i, v in ipairs(source) do
+			out[i] = v
+		end
+	end
+	return out
+end
+
+NAmanage.updateLastCommand=function(rawArgs)
+	if type(rawArgs) ~= "table" then return end
+	local first = rawArgs[1]
+	if type(first) ~= "string" then return end
+	local lowerFirst = Lower(first)
+	if lowerFirst == "lastcommand" or lowerFirst == "lastcmd" then
+		return
+	end
+	if NAStuff._lastCommand then
+		NAStuff._prevCommand = NAmanage.cloneArgsArray(NAStuff._lastCommand)
+	else
+		NAStuff._prevCommand = nil
+	end
+	NAStuff._lastCommand = rawArgs
+end
+
 --[[ COMMAND FUNCTIONS ]]--
 local commandcount=0
 Loops = {}
@@ -3561,27 +7464,49 @@ cmd.add = function(aliases, info, func, requiresArguments)
 	requiresArguments = requiresArguments or false
 	local data = {func, info, requiresArguments}
 
-	for i, cmdName in pairs(aliases) do
-		if i == 1 then
-			cmds.Commands[cmdName:lower()] = data
-		else
-			cmds.Aliases[cmdName:lower()] = data
-		end
+	if type(aliases) ~= "table" or #aliases == 0 then
+		return
 	end
 
-	commandcount += 1
+	local primary = aliases[1]
+	local primaryLower = primary and primary:lower() or nil
+	if primaryLower then
+		if not cmds.Commands[primaryLower] then
+			commandcount += 1
+		end
+		cmds.Commands[primaryLower] = data
+	end
+
+	for index = 2, #aliases do
+		local aliasName = aliases[index]
+		if type(aliasName) == "string" and aliasName ~= "" then
+			cmds.Aliases[aliasName:lower()] = data
+		end
+	end
 end
 
 cmd.run = function(args)
+	local rawArgs = {}
+	for i, v in ipairs(args) do
+		rawArgs[i] = v
+	end
+
 	local caller, arguments = args[1], args
 	table.remove(args, 1)
 
+	local callerLower = (type(caller) == "string") and caller:lower() or nil
+	local shouldRecord = callerLower ~= "lastcommand" and callerLower ~= "lastcmd"
+
 	local success, msg = pcall(function()
-		local command = cmds.Commands[caller:lower()] or cmds.Aliases[caller:lower()]
+		local command = callerLower and (cmds.Commands[callerLower] or cmds.Aliases[callerLower]) or nil
 		if command then
 			command[1](unpack(arguments))
+			NAmanage.btBump()
+			if shouldRecord then
+				NAmanage.updateLastCommand(rawArgs)
+			end
 		else
-			local closest = didYouMean(caller:lower())
+			local closest = callerLower and didYouMean(callerLower) or nil
 			if closest and doPREDICTION then
 				local commandFunc = cmds.Commands[closest] and cmds.Commands[closest][1] or cmds.Aliases[closest] and cmds.Aliases[closest][1]
 				local requiresInput = cmds.Commands[closest] and cmds.Commands[closest][3] or cmds.Aliases[closest] and cmds.Aliases[closest][3]
@@ -3597,9 +7522,30 @@ cmd.run = function(args)
 								Callback = function(input)
 									local parsedArguments = ParseArguments(input)
 									if parsedArguments then
-										SpawnCall(function() commandFunc(unpack(parsedArguments)) end)
+										local predictedArguments = {}
+										for i, v in ipairs(parsedArguments) do
+											predictedArguments[i] = v
+										end
+										local record = {closest}
+										for _, v in ipairs(predictedArguments) do
+											record[#record + 1] = v
+										end
+										SpawnCall(function()
+											commandFunc(unpack(predictedArguments))
+											NAmanage.btBump()
+											if shouldRecord then
+												NAmanage.updateLastCommand(record)
+											end
+										end)
 									else
-										SpawnCall(function() commandFunc() end)
+										local record = {closest}
+										SpawnCall(function()
+											commandFunc()
+											NAmanage.btBump()
+											if shouldRecord then
+												NAmanage.updateLastCommand(record)
+											end
+										end)
 									end
 								end
 							}
@@ -3613,7 +7559,14 @@ cmd.run = function(args)
 							{
 								Text = "Run Command",
 								Callback = function()
-									SpawnCall(function() commandFunc() end)
+									local record = {closest}
+									SpawnCall(function()
+										commandFunc()
+										NAmanage.btBump()
+										if shouldRecord then
+											NAmanage.updateLastCommand(record)
+										end
+									end)
 								end
 							}
 						}
@@ -3679,7 +7632,7 @@ cmd.loop = function(commandName, args)
 					pcall(function() Loops[loopKey].command(Unpack(Loops[loopKey].args)) end)
 
 					local acc = 0
-					NAlib.connect(connKey, RunService.Stepped:Connect(function(_, dt)
+					NAlib.connect(connKey, RunService.RenderStepped:Connect(function(dt)
 						local L = Loops[loopKey]
 						if not L or not L.running then
 							NAlib.disconnect(connKey)
@@ -4937,6 +8890,28 @@ function placeName()
 	local info = getPlaceInfo()
 	local name = info and NAlib.isProperty(info, "Name")
 	return name or "unknown"
+end
+
+function placeIconAssetId()
+	local info = getPlaceInfo()
+	local icon = info and NAlib.isProperty(info, "IconImageAssetId")
+	if typeof(icon) == "number" then
+		return icon
+	end
+	if typeof(icon) == "string" then
+		local digits = icon:match("(%d+)")
+		if digits then
+			local numeric = tonumber(digits)
+			if numeric then
+				return numeric
+			end
+		end
+		local asNumber = tonumber(icon)
+		if asNumber then
+			return asNumber
+		end
+	end
+	return nil
 end
 
 function SaveUIStroke(color)
@@ -6281,14 +10256,14 @@ NAmanage.loadButtonIDS = function()
 			writefile(path, HttpService:JSONEncode({}))
 		end)
 		if not okCreate then
-			loaderWarn('UserButtons', 'failed to create storage: '..tostring(createErr))
+			NAmanage.loaderWarn('UserButtons', 'failed to create storage: '..tostring(createErr))
 			return false
 		end
 	end
 
 	local okRead, raw = pcall(readfile, path)
 	if not okRead or type(raw) ~= "string" then
-		loaderWarn('UserButtons', 'failed to read storage: '..tostring(raw))
+		NAmanage.loaderWarn('UserButtons', 'failed to read storage: '..tostring(raw))
 		return false
 	end
 
@@ -6296,13 +10271,13 @@ NAmanage.loadButtonIDS = function()
 		return HttpService:JSONDecode(raw)
 	end)
 	if not okDecode or type(decoded) ~= "table" then
-		loaderWarn('UserButtons', 'invalid storage data; resetting')
+		NAmanage.loaderWarn('UserButtons', 'invalid storage data; resetting')
 		NAUserButtons = {}
 		local okReset, resetErr = pcall(function()
 			writefile(path, HttpService:JSONEncode(NAUserButtons))
 		end)
 		if not okReset then
-			loaderWarn('UserButtons', 'failed to reset storage: '..tostring(resetErr))
+			NAmanage.loaderWarn('UserButtons', 'failed to reset storage: '..tostring(resetErr))
 		end
 		return false
 	end
@@ -6318,7 +10293,7 @@ NAmanage.AutoExecSave=function(data, context)
 	end)
 	if not ok then
 		if context == 'loader' then
-			loaderWarn('AutoExec', 'failed to update storage: '..tostring(err))
+			NAmanage.loaderWarn('AutoExec', 'failed to update storage: '..tostring(err))
 		else
 			warn("[NA] AutoExec save failed: "..tostring(err))
 		end
@@ -6340,14 +10315,14 @@ NAmanage.loadAutoExec = function()
 			writefile(path, HttpService:JSONEncode({ commands = {}, args = {} }))
 		end)
 		if not okCreate then
-			loaderWarn('AutoExec', 'failed to create storage: '..tostring(createErr))
+			NAmanage.loaderWarn('AutoExec', 'failed to create storage: '..tostring(createErr))
 			return false
 		end
 	end
 
 	local okRead, raw = pcall(readfile, path)
 	if not okRead or type(raw) ~= 'string' then
-		loaderWarn('AutoExec', 'failed to read storage: '..tostring(raw))
+		NAmanage.loaderWarn('AutoExec', 'failed to read storage: '..tostring(raw))
 		return false
 	end
 
@@ -6355,7 +10330,7 @@ NAmanage.loadAutoExec = function()
 		return HttpService:JSONDecode(raw)
 	end)
 	if not okDecode or type(decoded) ~= 'table' then
-		loaderWarn('AutoExec', 'failed to decode storage; keeping previous data')
+		NAmanage.loaderWarn('AutoExec', 'failed to decode storage; keeping previous data')
 		return false
 	end
 
@@ -6419,7 +10394,7 @@ NAmanage.LoadPlugins = function()
 	if not (isfolder and isfolder(pluginDir)) then
 		local ok, err = pcall(makefolder, pluginDir)
 		if not ok then
-			loaderWarn('Plugins', 'failed to ensure folder: '..tostring(err))
+			NAmanage.loaderWarn('Plugins', 'failed to ensure folder: '..tostring(err))
 			return false
 		end
 	end
@@ -6468,7 +10443,7 @@ NAmanage.LoadPlugins = function()
 	local okList, files = pcall(listfiles, pluginDir)
 	if not okList or type(files) ~= 'table' then
 		local errMsg = okList and 'invalid directory listing' or tostring(files)
-		loaderWarn('Plugins', 'failed to enumerate: '..errMsg)
+		NAmanage.loaderWarn('Plugins', 'failed to enumerate: '..errMsg)
 		return false
 	end
 
@@ -6728,6 +10703,47 @@ NAmanage.InitPlugs=function()
 	)
 
 	cmd.add(
+		{"reloadplugin","relplug","rp"},
+		{"reloadplugin [name]","Reload plugin files (reloads all if no name provided)"},
+		function(...)
+			if not CustomFunctionSupport or not (NAmanage and NAmanage.LoadPlugins) then
+				DoNotif("Plugin loader unavailable",3)
+				return
+			end
+			local query = tostring((...) or ""):lower()
+			local pluginDir = NAfiles.NAPLUGINFILEPATH
+			if not isfolder or not isfolder(pluginDir) then
+				DoNotif("Plugins folder not found",3)
+				return
+			end
+			local ok, items = pcall(listfiles, pluginDir)
+			if not ok or type(items) ~= "table" then
+				DoNotif("Failed to list plugins",3)
+				return
+			end
+			if query ~= "" then
+				local matched = false
+				for _, path in ipairs(items) do
+					if Lower(path):match("%.na$") then
+						local name = path:match("[^\\/]+$") or path
+						if name and name:lower():find(query, 1, true) then
+							matched = true
+							break
+						end
+					end
+				end
+				if not matched then
+					DoNotif("No plugin matched '"..query.."'",3)
+					return
+				end
+			end
+			if not NAmanage.LoadPlugins() then
+				DoNotif("Failed to reload plugins",3)
+			end
+		end
+	)
+
+	cmd.add(
 		{"removeplugin","rmplugin","delplugin","rmp"},
 		{"removeplugin","Move a plugin file from Nameless-Admin/Plugins back to workspace"},
 		function()
@@ -6838,7 +10854,7 @@ end
 NAmanage.RenderUserButtons = function()
 	local screenGui = NAmanage.waitForScreenGui(5)
 	if not screenGui then
-		loaderWarn('RenderUserButtons', 'aborted: interface not ready')
+		NAmanage.loaderWarn('RenderUserButtons', 'aborted: interface not ready')
 		return false
 	end
 	if NAmanage._renderUserButtonsRunning then
@@ -7316,7 +11332,7 @@ NAlib.parseText = function(text, watch, rPlr)
 					local afterCommand = segment:sub(commandStart + 1)
 					local remainder = afterCommand:gsub("^%s+", "")
 					if nextSlash then
-						remainder = remainder .. "\\" .. text:sub(nextSlash + 1)
+						remainder = remainder.."\\"..text:sub(nextSlash + 1)
 					end
 					Insert(commands, {parsed[1], remainder})
 					break
@@ -7390,6 +11406,609 @@ cmd.add({"loadstring", "ls", "lstring", "loads", "execute"}, {"loadstring <code>
 	Spawn(func)
 end, true)
 
+NA_SHADER_EFFECT_NAMES = {
+	"NAShaderBloom",
+	"NAShaderTropic",
+	"NAShaderSky",
+	"NAShaderBlur",
+	"NAShaderEfecto",
+	"NAShaderInari",
+	"NAShaderNormal",
+	"NAShaderSunRays",
+	"NAShaderSunset",
+	"NAShaderTakayama",
+}
+
+NAmanage.NAremoveShaderEffects=function(lighting)
+	for _, name in ipairs(NA_SHADER_EFFECT_NAMES) do
+		local inst = lighting:FindFirstChild(name)
+		if inst then
+			inst:Destroy()
+		end
+	end
+end
+
+cmd.add({"shaders", "shader", "rtx", "hd"}, {"shaders (shader, rtx, hd)", "Enable a shader preset for Lighting"}, function()
+	local lighting = Lighting or SafeGetService("Lighting")
+	if not lighting then
+		DoNotif("Lighting service unavailable", 3)
+		return
+	end
+
+	if not NAmanage._shaderSettingsBackup then
+		NAmanage._shaderSettingsBackup = {
+			Brightness = lighting.Brightness;
+			ColorShift_Bottom = lighting.ColorShift_Bottom;
+			ColorShift_Top = lighting.ColorShift_Top;
+			OutdoorAmbient = lighting.OutdoorAmbient;
+			ClockTime = lighting.ClockTime;
+			FogColor = lighting.FogColor;
+			FogEnd = lighting.FogEnd;
+			FogStart = lighting.FogStart;
+			ExposureCompensation = lighting.ExposureCompensation;
+			ShadowSoftness = lighting.ShadowSoftness;
+			Ambient = lighting.Ambient;
+		}
+	end
+
+	NAmanage.NAremoveShaderEffects(lighting)
+
+	local function createEffect(className, name)
+		local inst = InstanceNew(className)
+		inst.Name = name
+		inst.Parent = lighting
+		return inst
+	end
+
+	local bloom = createEffect("BloomEffect", "NAShaderBloom")
+	bloom.Intensity = 0.1
+	bloom.Threshold = 0
+	bloom.Size = 100
+
+	local tropic = createEffect("Sky", "NAShaderTropic")
+	tropic.SkyboxUp = "http://www.roblox.com/asset/?id=169210149"
+	tropic.SkyboxLf = "http://www.roblox.com/asset/?id=169210133"
+	tropic.SkyboxBk = "http://www.roblox.com/asset/?id=169210090"
+	tropic.SkyboxFt = "http://www.roblox.com/asset/?id=169210121"
+	tropic.StarCount = 100
+	tropic.SkyboxDn = "http://www.roblox.com/asset/?id=169210108"
+	tropic.SkyboxRt = "http://www.roblox.com/asset/?id=169210143"
+
+	local shaderSky = createEffect("Sky", "NAShaderSky")
+	shaderSky.SkyboxUp = "http://www.roblox.com/asset/?id=196263782"
+	shaderSky.SkyboxLf = "http://www.roblox.com/asset/?id=196263721"
+	shaderSky.SkyboxBk = "http://www.roblox.com/asset/?id=196263721"
+	shaderSky.SkyboxFt = "http://www.roblox.com/asset/?id=196263721"
+	shaderSky.CelestialBodiesShown = false
+	shaderSky.SkyboxDn = "http://www.roblox.com/asset/?id=196263643"
+	shaderSky.SkyboxRt = "http://www.roblox.com/asset/?id=196263721"
+
+	local blur = createEffect("BlurEffect", "NAShaderBlur")
+	blur.Size = 2
+
+	local efecto = createEffect("BlurEffect", "NAShaderEfecto")
+	efecto.Enabled = false
+	efecto.Size = 2
+
+	local inari = createEffect("ColorCorrectionEffect", "NAShaderInari")
+	inari.Saturation = 0.05
+	inari.TintColor = Color3.fromRGB(255, 224, 219)
+
+	local normal = createEffect("ColorCorrectionEffect", "NAShaderNormal")
+	normal.Enabled = false
+	normal.Saturation = -0.2
+	normal.TintColor = Color3.fromRGB(255, 232, 215)
+
+	local sunRays = createEffect("SunRaysEffect", "NAShaderSunRays")
+	sunRays.Intensity = 0.05
+
+	local sunset = createEffect("Sky", "NAShaderSunset")
+	sunset.SkyboxUp = "rbxassetid://323493360"
+	sunset.SkyboxLf = "rbxassetid://323494252"
+	sunset.SkyboxBk = "rbxassetid://323494035"
+	sunset.SkyboxFt = "rbxassetid://323494130"
+	sunset.SkyboxDn = "rbxassetid://323494368"
+	sunset.SunAngularSize = 14
+	sunset.SkyboxRt = "rbxassetid://323494067"
+
+	local takayama = createEffect("ColorCorrectionEffect", "NAShaderTakayama")
+	takayama.Enabled = false
+	takayama.Saturation = -0.3
+	takayama.Contrast = 0.1
+	takayama.TintColor = Color3.fromRGB(235, 214, 204)
+
+	lighting.Brightness = 2.14
+	lighting.ColorShift_Bottom = Color3.fromRGB(11, 0, 20)
+	lighting.ColorShift_Top = Color3.fromRGB(240, 127, 14)
+	lighting.OutdoorAmbient = Color3.fromRGB(34, 0, 49)
+	lighting.ClockTime = 6.7
+	lighting.FogColor = Color3.fromRGB(94, 76, 106)
+	lighting.FogEnd = 1000
+	lighting.FogStart = 0
+	lighting.ExposureCompensation = 0.24
+	lighting.ShadowSoftness = 0
+	lighting.Ambient = Color3.fromRGB(59, 33, 27)
+
+	DoNotif("Shader preset applied.", 3)
+end)
+
+cmd.add({"unshaders", "shadersoff", "rtxoff"}, {"unshaders (shadersoff, rtxoff)", "Disable the shader preset and restore Lighting"}, function()
+	local lighting = Lighting or SafeGetService("Lighting")
+	if not lighting then
+		DoNotif("Lighting service unavailable", 3)
+		return
+	end
+
+	NAmanage.NAremoveShaderEffects(lighting)
+
+	local backup = NAmanage._shaderSettingsBackup
+	if backup then
+		for prop, value in pairs(backup) do
+			pcall(function()
+				lighting[prop] = value
+			end)
+		end
+		NAmanage._shaderSettingsBackup = nil
+	end
+
+	DoNotif("Shader preset removed.", 3)
+end)
+
+NAmanage.NAibtoolsVectorString=function(vec)
+	return Format("Vector3.new(%s,%s,%s)", tostring(vec.X), tostring(vec.Y), tostring(vec.Z))
+end
+
+NAmanage.NAibtoolsCreateUI=function(state, actions)
+	local gui = InstanceNew("ScreenGui")
+	gui.Name = "iBToolsUI"
+	NaProtectUI(gui)
+
+	local frame = InstanceNew("Frame", gui)
+	frame.Name = "Panel"
+	frame.Size = UDim2.new(0, 240, 0, 260)
+	frame.Position = UDim2.new(0.05, 0, 0.4, 0)
+	frame.BackgroundColor3 = Color3.fromRGB(26, 26, 26)
+	frame.BorderSizePixel = 0
+
+	local frameCorner = InstanceNew("UICorner", frame)
+	frameCorner.CornerRadius = UDim.new(0, 8)
+
+	local header = InstanceNew("Frame", frame)
+	header.Name = "Header"
+	header.Size = UDim2.new(1, 0, 0, 36)
+	header.BackgroundColor3 = Color3.fromRGB(38, 38, 38)
+	header.BorderSizePixel = 0
+	header.Active = true
+
+	local title = InstanceNew("TextLabel", header)
+	title.BackgroundTransparency = 1
+	title.Font = Enum.Font.GothamSemibold
+	title.TextSize = 16
+	title.TextXAlignment = Enum.TextXAlignment.Left
+	title.TextColor3 = Color3.fromRGB(255, 255, 255)
+	title.Text = "iBuild Tools"
+	title.Size = UDim2.new(1, -40, 1, 0)
+	title.Position = UDim2.new(0, 10, 0, 0)
+
+	local statusLabel = InstanceNew("TextLabel", frame)
+	statusLabel.Name = "Status"
+	statusLabel.BackgroundTransparency = 1
+	statusLabel.Font = Enum.Font.Gotham
+	statusLabel.TextSize = 14
+	statusLabel.TextXAlignment = Enum.TextXAlignment.Left
+	statusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+	statusLabel.Position = UDim2.new(0, 12, 0, 46)
+	statusLabel.Size = UDim2.new(1, -24, 0, 20)
+	statusLabel.Text = "Target: none"
+
+	local buttonHolder = InstanceNew("Frame", frame)
+	buttonHolder.BackgroundTransparency = 1
+	buttonHolder.Position = UDim2.new(0, 12, 0, 72)
+	buttonHolder.Size = UDim2.new(1, -24, 1, -84)
+
+	local layout = InstanceNew("UIListLayout", buttonHolder)
+	layout.Padding = UDim.new(0, 6)
+	layout.FillDirection = Enum.FillDirection.Vertical
+	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	local DEFAULT_COLOR = Color3.fromRGB(52, 52, 52)
+	local HOVER_COLOR = Color3.fromRGB(66, 66, 66)
+	local ACTIVE_COLOR = Color3.fromRGB(80, 110, 255)
+
+	local function makeButton(text)
+		local btn = InstanceNew("TextButton", buttonHolder)
+		btn.Name = text
+		btn.Size = UDim2.new(1, 0, 0, 34)
+		btn.BackgroundColor3 = DEFAULT_COLOR
+		btn.BorderSizePixel = 0
+		btn.AutoButtonColor = false
+		btn.Font = Enum.Font.GothamSemibold
+		btn.TextSize = 14
+		btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		btn.Text = text
+		local corner = InstanceNew("UICorner", btn)
+		corner.CornerRadius = UDim.new(0, 6)
+		btn.MouseEnter:Connect(function()
+			if btn.BackgroundColor3 ~= ACTIVE_COLOR then
+				btn.BackgroundColor3 = HOVER_COLOR
+			end
+		end)
+		btn.MouseLeave:Connect(function()
+			if btn.BackgroundColor3 ~= ACTIVE_COLOR then
+				btn.BackgroundColor3 = DEFAULT_COLOR
+			end
+		end)
+		return btn
+	end
+
+	local modeButtons = {}
+
+	local function refreshModeButtons()
+		local selected = actions.getMode and actions.getMode() or nil
+		for mode, btn in pairs(modeButtons) do
+			if selected == mode then
+				btn.BackgroundColor3 = ACTIVE_COLOR
+			else
+				btn.BackgroundColor3 = DEFAULT_COLOR
+			end
+		end
+	end
+
+	local function createModeButton(label, mode)
+		local btn = makeButton(label)
+		modeButtons[mode] = btn
+		btn.MouseButton1Click:Connect(function()
+			if actions.setMode then
+				actions.setMode(mode)
+			end
+			refreshModeButtons()
+		end)
+		return btn
+	end
+
+	createModeButton("Delete", "delete")
+	createModeButton("Toggle Anchor", "anchor")
+	createModeButton("Toggle CanCollide", "collide")
+
+	local undoButton = makeButton("Undo Delete")
+	undoButton.MouseButton1Click:Connect(function()
+		if actions.undo then
+			actions.undo()
+		end
+	end)
+
+	local copyButton = makeButton("Copy Delete Script")
+	copyButton.MouseButton1Click:Connect(function()
+		if actions.copy then
+			actions.copy()
+		end
+	end)
+
+	NAgui.dragger(frame, header)
+
+	state.statusLabel = statusLabel
+	state.frame = frame
+	state.refreshModeButtons = refreshModeButtons
+	refreshModeButtons()
+
+	return gui
+end
+
+NAmanage.NAibtoolsCleanup=function(state)
+	if not state then
+		return
+	end
+	if state.connections then
+		for _, conn in ipairs(state.connections) do
+			if conn and conn.Disconnect then
+				conn:Disconnect()
+			end
+		end
+		table.clear(state.connections)
+	end
+	if state.highlight then
+		pcall(function()
+			state.highlight:Destroy()
+		end)
+		state.highlight = nil
+	end
+	if state.gui then
+		pcall(function()
+			state.gui:Destroy()
+		end)
+		state.gui = nil
+	end
+	state.statusLabel = nil
+	state.frame = nil
+	state.currentPart = nil
+	state.refreshModeButtons = nil
+end
+
+cmd.add({"ibtools"}, {"ibtools", "Load the iBuild Tools helper tool"}, function()
+	if not LocalPlayer then
+		DoNotif("Local player not ready.", 3)
+		return
+	end
+
+	local backpack = getBp()
+	if not backpack then
+		backpack = LocalPlayer:FindFirstChild("Backpack") or LocalPlayer:WaitForChild("Backpack", 3)
+	end
+	if not backpack then
+		DoNotif("Backpack not available.", 3)
+		return
+	end
+
+	local state = NAmanage._ibtools
+	if state and state.tool and state.tool.Parent then
+		DoNotif("iBTools is already loaded.", 3)
+		return
+	end
+
+	local tool = InstanceNew("Tool", backpack)
+	tool.Name = "iBTools"
+	tool.RequiresHandle = false
+
+	state = {
+		tool = tool,
+		history = {},
+		saveHistory = {},
+		connections = {},
+		toolConnections = {},
+		currentPart = nil,
+		currentMode = "delete",
+	}
+	NAmanage._ibtools = state
+
+	local function modeLabel()
+		local mode = state.currentMode
+		if not mode then
+			return "none"
+		end
+		return mode
+	end
+
+	local function updateStatus(part)
+		if not state.statusLabel then
+			return
+		end
+		local targetText = "none"
+		if part then
+			if not part.Parent then
+				targetText = part.Name.." (stored)"
+			else
+				local ok, fullName = pcall(part.GetFullName, part)
+				targetText = ok and fullName or part.Name
+			end
+		end
+		state.statusLabel.Text = Format("Mode: %s | Target: %s", modeLabel():upper(), targetText)
+	end
+
+	local function setTarget(part)
+		if part and not part:IsA("BasePart") then
+			part = nil
+		end
+		state.currentPart = part
+		if state.highlight then
+			state.highlight.Adornee = part
+		end
+		updateStatus(part)
+	end
+
+	local function onEquipped(mouse)
+		NAmanage.NAibtoolsCleanup(state)
+
+		local highlight = InstanceNew("SelectionBox")
+		highlight.Name = "iBToolsSelection"
+		highlight.LineThickness = 0.04
+		highlight.Color3 = Color3.fromRGB(0, 170, 255)
+		highlight.Adornee = nil
+		highlight.Parent = workspace.CurrentCamera or workspace
+		state.highlight = highlight
+
+		local function undoLast()
+			local record = table.remove(state.history)
+			if not record then
+				DoNotif("Nothing to undo.", 2)
+				return
+			end
+			local part = record.part
+			if part then
+				part.Parent = record.parent
+				if record.cframe then
+					pcall(function()
+						part.CFrame = record.cframe
+					end)
+				end
+				setTarget(part)
+				local saved = record.data
+				if saved then
+					for i = #state.saveHistory, 1, -1 do
+						if state.saveHistory[i] == saved then
+							table.remove(state.saveHistory, i)
+							break
+						end
+					end
+				end
+				DoNotif("Restored '"..part.Name.."'", 2)
+			end
+		end
+
+		local function copyScript()
+			if #state.saveHistory == 0 then
+				DoNotif("No deleted parts to export.", 3)
+				return
+			end
+			local lines = {}
+			for _, data in ipairs(state.saveHistory) do
+				local pos = data.position
+				local vec = NAmanage.NAibtoolsVectorString(pos)
+				lines[#lines + 1] = Format(
+					"for _,v in ipairs(workspace:FindPartsInRegion3(Region3.new(%s, %s), nil, math.huge)) do if v.Name == %q then v:Destroy() end end",
+					vec,
+					vec,
+					data.name
+				)
+			end
+			local scriptText = Concat(lines, "\n")
+			if setclipboard then
+				setclipboard(scriptText)
+				DoNotif("Copied delete script to clipboard.", 3)
+			else
+				DoWindow("Copy this script:\n\n"..scriptText)
+			end
+		end
+
+		local function applyDelete(part)
+			if not part or not part.Parent then
+				DoNotif("Selected part is no longer available.", 3)
+				setTarget(nil)
+				return
+			end
+			local record = {
+				part = part,
+				parent = part.Parent,
+				cframe = part.CFrame,
+			}
+			local data = {
+				name = part.Name,
+				position = part.Position,
+			}
+			record.data = data
+			Insert(state.history, record)
+			Insert(state.saveHistory, data)
+			part.Parent = nil
+			setTarget(nil)
+			DoNotif("Deleted '"..part.Name.."'", 2)
+		end
+
+		local function applyAnchor(part)
+			if not part or not part.Parent then
+				DoNotif("Selected part is no longer available.", 3)
+				setTarget(nil)
+				return
+			end
+			part.Anchored = not part.Anchored
+			updateStatus(part)
+			DoNotif(Format("%s anchored %s", part.Name, part.Anchored and "enabled" or "disabled"), 2)
+		end
+
+		local function applyCollide(part)
+			if not part or not part.Parent then
+				DoNotif("Selected part is no longer available.", 3)
+				setTarget(nil)
+				return
+			end
+			part.CanCollide = not part.CanCollide
+			updateStatus(part)
+			DoNotif(Format("%s CanCollide %s", part.Name, part.CanCollide and "enabled" or "disabled"), 2)
+		end
+
+		local modeHandlers = {
+			delete = applyDelete,
+			anchor = applyAnchor,
+			collide = applyCollide,
+		}
+
+		local function setMode(mode)
+			if not modeHandlers[mode] then
+				return
+			end
+			state.currentMode = mode
+			if state.refreshModeButtons then
+				state.refreshModeButtons()
+			end
+			updateStatus(state.currentPart)
+		end
+
+		local function applyMode(part)
+			if not part or not part:IsA("BasePart") then
+				DoNotif("Aim at a part first.", 3)
+				return
+			end
+			setTarget(part)
+			local handler = modeHandlers[state.currentMode or ""]
+			if not handler then
+				DoNotif("Select a mode first.", 3)
+				return
+			end
+			handler(part)
+		end
+
+		local uiActions = {
+			setMode = setMode,
+			getMode = function()
+				return state.currentMode
+			end,
+			undo = undoLast,
+			copy = copyScript,
+		}
+
+		state.gui = NAmanage.NAibtoolsCreateUI(state, uiActions)
+		if not modeHandlers[state.currentMode or ""] then
+			state.currentMode = "delete"
+		end
+		setMode(state.currentMode)
+		updateStatus(state.currentPart)
+
+		local function refreshTarget()
+			local target = mouse.Target
+			if target and target:IsA("BasePart") then
+				setTarget(target)
+			end
+		end
+
+		refreshTarget()
+
+		Insert(state.connections, mouse.Move:Connect(refreshTarget))
+		Insert(state.connections, mouse.Button1Down:Connect(function()
+			local target = mouse.Target
+			if target and target:IsA("BasePart") then
+				applyMode(target)
+			end
+		end))
+	end
+
+	Insert(state.toolConnections, tool.Equipped:Connect(onEquipped))
+	Insert(state.toolConnections, tool.Unequipped:Connect(function()
+		NAmanage.NAibtoolsCleanup(state)
+	end))
+	Insert(state.toolConnections, tool.AncestryChanged:Connect(function(_, parent)
+		if not parent then
+			NAmanage.NAibtoolsCleanup(state)
+			if NAmanage._ibtools == state then
+				NAmanage._ibtools = nil
+			end
+		end
+	end))
+
+	DoNotif("iBTools loaded. Equip the tool to use it.", 3)
+end)
+
+cmd.add({"unibtools"}, {"unibtools", "Remove the iBuild Tools helper tool"}, function()
+	local state = NAmanage._ibtools
+	if not state then
+		DoNotif("iBTools is not active.", 3)
+		return
+	end
+	if state.tool then
+		pcall(function()
+			state.tool:Destroy()
+		end)
+	end
+	NAmanage.NAibtoolsCleanup(state)
+	if state.toolConnections then
+		for _, conn in ipairs(state.toolConnections) do
+			if conn and conn.Disconnect then
+				conn:Disconnect()
+			end
+		end
+		state.toolConnections = nil
+	end
+	NAmanage._ibtools = nil
+	DoNotif("iBTools removed.", 3)
+end)
+
 -- detected by roblox so it's disabled
 
 --[[cmd.add({"setfflag", "setff"}, {"setfflag <flag> <value> (setff)", "Set a fast flag"}, function(flag, value)
@@ -7411,7 +12030,7 @@ end, true)
 	if success then
 		DoNotif(Format("Set %s's value to %s", flag, value), 5, title)
 	else
-		DoNotif("Error occurred setting fast flag: " .. tostring(result), 10, title)
+		DoNotif("Error occurred setting fast flag: "..tostring(result), 10, title)
 	end
 end, true)]]
 
@@ -7726,6 +12345,29 @@ cmd.add({"executor","exec"},{"executor (exec)","Very simple executor"},function(
 	loadstring(game:HttpGet("https://raw.githubusercontent.com/ltseverydayyou/Nameless-Admin/main/NAexecutor.lua"))()
 end)
 
+cmd.add({"lastcommand","lastcmd"},{"lastcommand (lastcmd)","Re-run your previously executed command"},function()
+	local last=NAStuff._lastCommand
+	local first = last and last[1]
+	local lowerFirst = (type(first) == "string") and Lower(first) or nil
+	if not lowerFirst or lowerFirst == "lastcommand" or lowerFirst == "lastcmd" then
+		last = NAStuff._prevCommand
+		first = last and last[1]
+		lowerFirst = (type(first) == "string") and Lower(first) or nil
+	end
+	if type(last) ~= "table" or not lowerFirst or #last==0 then
+		DoNotif("No previous command recorded",2)
+		return
+	end
+	local replay=NAmanage.cloneArgsArray(last)
+	if #replay == 0 then
+		DoNotif("No previous command recorded",2)
+		return
+	end
+	SpawnCall(function()
+		cmd.run(replay)
+	end)
+end)
+
 cmd.add({"commandloop", "cmdloop"}, {"commandloop <command> {arguments} (cmdloop)", "Run a command on loop"}, function(...)
 	local args = {...}
 	local commandName = args[1]
@@ -7894,6 +12536,9 @@ cmd.add({"prefix"}, {"prefix <symbol>", "Changes the admin prefix"}, function(..
 	else
 		opt.prefix = newPrefix
 		DoNotif("Prefix set to: "..newPrefix)
+		if NAmanage.SyncPrefixUI then
+			NAmanage.SyncPrefixUI()
+		end
 	end
 end, true)
 
@@ -7915,6 +12560,9 @@ cmd.add({"saveprefix"}, {"saveprefix <symbol>", "Saves the prefix to a file and 
 		DoNotif("Prefix saved to: "..newPrefix)
 		if not FileSupport then
 			DebugNotif("Prefix will reset when Roblox closes (no file support detected).")
+		end
+		if NAmanage.SyncPrefixUI then
+			NAmanage.SyncPrefixUI()
 		end
 	end
 end, true)
@@ -8352,350 +13000,584 @@ windowRegistry = windowRegistry or {}
 StatsService = SafeGetService("Stats")
 
 NAstatsUI.Theme = {
-    Colors = {
-        Background = Color3.fromRGB(28, 30, 38),
-        Primary = Color3.fromRGB(38, 41, 52),
-        Secondary = Color3.fromRGB(40, 42, 52),
-        Border = Color3.fromRGB(70, 72, 90),
-        Text = Color3.fromRGB(230, 232, 245),
-        TextMuted = Color3.fromRGB(145, 148, 165),
-        TextSubtle = Color3.fromRGB(200, 200, 210),
-        Close = Color3.fromRGB(220, 70, 70),
-        Minimize = Color3.fromRGB(100, 120, 255),
-        Good = Color3.fromRGB(0, 255, 120),
-        Warn = Color3.fromRGB(255, 210, 0),
-        Bad = Color3.fromRGB(255, 80, 80),
-    },
-    Fonts = {
-        Title = Enum.Font.GothamMedium,
-        Body = Enum.Font.Gotham,
-        BodySemibold = Enum.Font.GothamSemibold,
-        BodyBold = Enum.Font.GothamBold,
-    },
-    Radius = {
-        Window = UDim.new(0, 10),
-        Container = UDim.new(0, 8),
-        Button = UDim.new(1, 0),
-    },
-    Sizes = {
-        TopBarHeight = IsOnMobile and 44 or 32,
-        ActionButton = IsOnMobile and 26 or 22,
-    }
+	Colors = {
+		Background = Color3.fromRGB(10, 12, 20),
+		Primary = Color3.fromRGB(20, 23, 34),
+		Secondary = Color3.fromRGB(30, 33, 46),
+		Border = Color3.fromRGB(70, 75, 95),
+		Accent = Color3.fromRGB(90, 190, 255),
+		Text = Color3.fromRGB(235, 238, 250),
+		TextMuted = Color3.fromRGB(150, 154, 174),
+		TextSubtle = Color3.fromRGB(205, 208, 222),
+		Close = Color3.fromRGB(230, 80, 90),
+		Minimize = Color3.fromRGB(110, 130, 255),
+		Good = Color3.fromRGB(0, 255, 140),
+		Warn = Color3.fromRGB(255, 210, 0),
+		Bad = Color3.fromRGB(255, 90, 90),
+	},
+	Fonts = {
+		Title = Enum.Font.GothamSemibold,
+		Body = Enum.Font.Gotham,
+		BodySemibold = Enum.Font.GothamSemibold,
+		BodyBold = Enum.Font.GothamBold,
+	},
+	Radius = {
+		Window = UDim.new(0, 14),
+		Container = UDim.new(0, 12),
+		Button = UDim.new(1, 0),
+	},
+	Sizes = {
+		TopBarHeight = IsOnMobile and 42 or 30,
+		ActionButton = IsOnMobile and 24 or 20,
+	}
 }
 
-NAstatsUI.createInstance=function(className, properties, parent)
-    local inst = InstanceNew(className)
-    for prop, value in pairs(properties) do
-        inst[prop] = value
-    end
-    if parent then
-        inst.Parent = parent
-    end
-    return inst
+NAstatsUI.createInstance = function(className, properties, parent)
+	local inst = InstanceNew(className)
+	for prop, value in pairs(properties) do
+		inst[prop] = value
+	end
+	if parent then
+		inst.Parent = parent
+	end
+	return inst
 end
 
 function NAstatsUI.colorToHex(c)
-    return Format("#%02X%02X%02X", math.floor(c.R * 255), math.floor(c.G * 255), math.floor(c.B * 255))
+	return Format("#%02X%02X%02X", math.floor(c.R * 255), math.floor(c.G * 255), math.floor(c.B * 255))
 end
 
 function NAstatsUI.ensureSingle(key, buildFn)
-    local existing = windowRegistry[key]
-    if existing and existing.screenGui and existing.screenGui.Parent then
-        existing.bringToFront()
-        return existing
-    end
+	local existing = windowRegistry[key]
+	if existing and existing.screenGui and existing.screenGui.Parent then
+		existing.bringToFront()
+		return existing
+	end
 
-    local newUi = buildFn()
-    windowRegistry[key] = newUi
+	local newUi = buildFn()
+	windowRegistry[key] = newUi
 
-    local originalCloseFunction = newUi.closeFunction
-    newUi.closeButton.MouseButton1Click:Connect(function()
-        if windowRegistry[key] == newUi then
-            windowRegistry[key] = nil
-        end
-        if originalCloseFunction then
-            originalCloseFunction()
-        end
-        newUi.screenGui:Destroy()
-    end)
-    return newUi
+	local originalCloseFunction = newUi.closeFunction
+	newUi.closeButton.MouseButton1Click:Connect(function()
+		if windowRegistry[key] == newUi then
+			windowRegistry[key] = nil
+		end
+		if originalCloseFunction then
+			originalCloseFunction()
+		end
+		newUi.screenGui:Destroy()
+	end)
+	return newUi
 end
 
 function NAstatsUI.createWindow(position, baseSize, titleText)
-    windowCounter += 1
-    local T = NAstatsUI.Theme
+	windowCounter += 1
+	local T = NAstatsUI.Theme
 
-    local screenGui = NAstatsUI.createInstance("ScreenGui", {
-        ResetOnSpawn = false,
-        ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-        DisplayOrder = 100 + windowCounter,
-    })
-    NaProtectUI(screenGui)
+	local screenGui = NAstatsUI.createInstance("ScreenGui", {
+		ResetOnSpawn = false,
+		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+		DisplayOrder = 100 + windowCounter,
+	})
+	NaProtectUI(screenGui)
 
-    local holder = NAstatsUI.createInstance("Frame", {
-        Name = "Holder",
-        BackgroundTransparency = 1,
-        AnchorPoint = Vector2.new(0.5, 0.5),
-        Position = position or UDim2.new(0.5, 0, 0.35, 0),
-        Size = baseSize,
-        Parent = screenGui,
-    })
+	local holder = NAstatsUI.createInstance("Frame", {
+		Name = "Holder",
+		BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = position or UDim2.new(0.5, 0, 0.3, 0),
+		Size = baseSize,
+		Parent = screenGui,
+	})
 
-    local window = NAstatsUI.createInstance("Frame", {
-        Name = "Window",
-        BackgroundColor3 = T.Colors.Background,
-        BorderSizePixel = 0,
-        Size = UDim2.new(1, 0, 1, 0),
-        Parent = holder
-    })
-    NAstatsUI.createInstance("UICorner", { CornerRadius = T.Radius.Window }, window)
-    NAstatsUI.createInstance("UIStroke", { Color = T.Colors.Border, Thickness = 1.5, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, window)
+	local window = NAstatsUI.createInstance("Frame", {
+		Name = "Window",
+		BackgroundColor3 = T.Colors.Primary,
+		BorderSizePixel = 0,
+		Size = UDim2.new(1, 0, 1, 0),
+		Parent = holder
+	})
+	NAstatsUI.createInstance("UICorner", { CornerRadius = T.Radius.Window }, window)
+	NAstatsUI.createInstance("UIStroke", {
+		Color = T.Colors.Border,
+		Thickness = 1.2,
+		ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	}, window)
+	NAstatsUI.createInstance("UIGradient", {
+		Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, Color3.fromRGB(7, 9, 16)),
+			ColorSequenceKeypoint.new(1, T.Colors.Primary),
+		}),
+		Rotation = 90,
+	}, window)
 
-    local topBar = NAstatsUI.createInstance("Frame", {
-        Name = "TopBar",
-        BackgroundColor3 = T.Colors.Primary,
-        BorderSizePixel = 0,
-        Size = UDim2.new(1, 0, 0, T.Sizes.TopBarHeight),
-        ZIndex = 2,
-        Parent = window,
-    })
-    NAstatsUI.createInstance("UICorner", { CornerRadius = T.Radius.Window }, topBar)
+	local topBar = NAstatsUI.createInstance("Frame", {
+		Name = "TopBar",
+		BackgroundColor3 = Color3.fromRGB(16, 18, 27),
+		BorderSizePixel = 0,
+		Size = UDim2.new(1, 0, 0, T.Sizes.TopBarHeight),
+		ZIndex = 2,
+		Parent = window,
+	})
+	NAstatsUI.createInstance("UICorner", {
+		CornerRadius = UDim.new(0, T.Radius.Window.Offset),
+	}, topBar)
 
-    local title = NAstatsUI.createInstance("TextLabel", {
-        Name = "Title",
-        BackgroundTransparency = 1,
-        Position = UDim2.new(0, 12, 0, 0),
-        Size = UDim2.new(1, -90, 1, 0),
-        Font = T.Fonts.Title,
-        Text = titleText,
-        TextColor3 = T.Colors.Text,
-        TextSize = IsOnMobile and 16 or 15,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        RichText = true,
-        ZIndex = 3,
-        Parent = topBar,
-    })
+	NAstatsUI.createInstance("UIPadding", {
+		PaddingLeft = UDim.new(0, 10),
+		PaddingRight = UDim.new(0, 8),
+	}, topBar)
 
-    local function createActionButton(name, text, color, offset)
-        local btn = NAstatsUI.createInstance("TextButton", {
-            Name = name,
-            BackgroundColor3 = color,
-            Position = UDim2.new(1, -offset, 0.5, 0),
-            AnchorPoint = Vector2.new(0.5, 0.5),
-            Size = UDim2.fromOffset(T.Sizes.ActionButton, T.Sizes.ActionButton),
-            Font = T.Fonts.BodyBold,
-            Text = text,
-            TextScaled = true,
-            TextColor3 = Color3.new(1, 1, 1),
-            ZIndex = 3,
-            RichText = true,
-            Parent = topBar,
-        })
-        NAstatsUI.createInstance("UICorner", { CornerRadius = T.Radius.Button }, btn)
-        return btn
-    end
+	local title = NAstatsUI.createInstance("TextLabel", {
+		Name = "Title",
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, -80, 1, 0),
+		Font = T.Fonts.Title,
+		Text = titleText,
+		TextColor3 = T.Colors.Text,
+		TextSize = IsOnMobile and 16 or 14,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		RichText = true,
+		ZIndex = 3,
+		Parent = topBar,
+	})
 
-    local closeButton = createActionButton("Close", "X", T.Colors.Close, IsOnMobile and 36 or 30)
-    local minimizeButton = createActionButton("Minimize", "–", T.Colors.Minimize, IsOnMobile and 68 or 56)
+	local function createActionButton(name, text, color, order)
+		local btn = NAstatsUI.createInstance("TextButton", {
+			Name = name,
+			BackgroundColor3 = color,
+			Size = UDim2.fromOffset(T.Sizes.ActionButton, T.Sizes.ActionButton),
+			AnchorPoint = Vector2.new(1, 0.5),
+			Position = UDim2.new(1, -(4 + (order - 1) * (T.Sizes.ActionButton + 4)), 0.5, 0),
+			Font = T.Fonts.BodyBold,
+			Text = text,
+			TextScaled = true,
+			TextColor3 = Color3.new(1, 1, 1),
+			ZIndex = 3,
+			RichText = true,
+			Parent = topBar,
+		})
+		NAstatsUI.createInstance("UICorner", { CornerRadius = UDim.new(1, 0) }, btn)
+		return btn
+	end
 
-    local content = NAstatsUI.createInstance("Frame", {
-        Name = "Content",
-        BackgroundTransparency = 1,
-        Position = UDim2.new(0, 10, 0, T.Sizes.TopBarHeight + 8),
-        Size = UDim2.new(1, -20, 1, -(T.Sizes.TopBarHeight + 18)),
-        ZIndex = 2,
-        Parent = window
-    })
-    NAstatsUI.createInstance("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8), PaddingTop = UDim.new(0, 2), PaddingBottom = UDim.new(0, 2) }, content)
-    
-    NAgui.draggerV2(holder, topBar)
-    local collapsed = false
-    local baseTitleText = titleText
-    local collapsedTitleText = titleText
+	local minimizeButton = createActionButton("Minimize", "–", T.Colors.Minimize, 2)
+	local closeButton = createActionButton("Close", "X", T.Colors.Close, 1)
 
-    minimizeButton.MouseButton1Click:Connect(function()
-        collapsed = not collapsed
-        content.Visible = not collapsed
-        if collapsed then
-            holder.Size = UDim2.fromOffset(holder.AbsoluteSize.X, T.Sizes.TopBarHeight + 8)
-            title.Text = collapsedTitleText
-        else
-            holder.Size = baseSize
-            title.Text = baseTitleText
-        end
-    end)
+	local content = NAstatsUI.createInstance("Frame", {
+		Name = "Content",
+		BackgroundTransparency = 1,
+		Position = UDim2.new(0, 10, 0, T.Sizes.TopBarHeight + 6),
+		Size = UDim2.new(1, -20, 1, -(T.Sizes.TopBarHeight + 14)),
+		ZIndex = 2,
+		Parent = window
+	})
+	NAstatsUI.createInstance("UIPadding", {
+		PaddingLeft = UDim.new(0, 8),
+		PaddingRight = UDim.new(0, 8),
+		PaddingTop = UDim.new(0, 6),
+		PaddingBottom = UDim.new(0, 6),
+	}, content)
 
-    return {
-        screenGui = screenGui, holder = holder, window = window, title = title, content = content, closeButton = closeButton, minimizeButton = minimizeButton,
-        setBaseTitle = function(t) baseTitleText = t if not collapsed then title.Text = t end end,
-        setCollapsedTitle = function(t) collapsedTitleText = t if collapsed then title.Text = t end end,
-        bringToFront = function() windowCounter += 1; screenGui.DisplayOrder = 100 + windowCounter end,
-    }
+	NAgui.draggerV2(holder, topBar)
+	local collapsed = false
+	local baseTitleText = titleText
+	local collapsedTitleText = titleText
+	local storedSize = baseSize
+
+	minimizeButton.MouseButton1Click:Connect(function()
+		collapsed = not collapsed
+		content.Visible = not collapsed
+		if collapsed then
+			storedSize = holder.Size
+			holder.Size = UDim2.fromOffset(holder.AbsoluteSize.X, T.Sizes.TopBarHeight + 8)
+			title.Text = collapsedTitleText
+		else
+			holder.Size = storedSize
+			title.Text = baseTitleText
+		end
+	end)
+
+	return {
+		screenGui = screenGui,
+		holder = holder,
+		window = window,
+		title = title,
+		content = content,
+		closeButton = closeButton,
+		minimizeButton = minimizeButton,
+		setBaseTitle = function(t)
+			baseTitleText = t
+			if not collapsed then
+				title.Text = t
+			end
+		end,
+		setCollapsedTitle = function(t)
+			collapsedTitleText = t
+			if collapsed then
+				title.Text = t
+			end
+		end,
+		bringToFront = function()
+			windowCounter += 1
+			screenGui.DisplayOrder = 100 + windowCounter
+		end,
+	}
 end
 
 function NAstatsUI.createStatDisplay(parent, titleText, subtitleText)
-    local T = NAstatsUI.Theme
-    local container = NAstatsUI.createInstance("Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, 0, 1, 0), Parent = parent })
-    
-    local valueLabel = NAstatsUI.createInstance("TextLabel", {
-        Name = "ValueLabel", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, IsOnMobile and 36 or 32),
-        Font = T.Fonts.BodySemibold, Text = "—", TextSize = IsOnMobile and 28 or 24, TextColor3 = T.Colors.TextSubtle,
-        TextXAlignment = Enum.TextXAlignment.Left, RichText = true, Parent = container,
-    })
+	local T = NAstatsUI.Theme
+	local container = NAstatsUI.createInstance("Frame", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 1, 0),
+		Parent = parent,
+	})
 
-    local subtitleLabel = NAstatsUI.createInstance("TextLabel", {
-        Name = "SubtitleLabel", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, IsOnMobile and 18 or 16),
-        Position = UDim2.new(0, 0, 0, IsOnMobile and 40 or 36), Font = T.Fonts.Body, Text = subtitleText,
-        TextSize = IsOnMobile and 16 or 14, TextColor3 = T.Colors.TextMuted, TextXAlignment = Enum.TextXAlignment.Left,
-        RichText = true, Parent = container,
-    })
+	NAstatsUI.createInstance("UIPadding", {
+		PaddingTop = UDim.new(0, 2),
+		PaddingBottom = UDim.new(0, 2),
+		PaddingLeft = UDim.new(0, 4),
+		PaddingRight = UDim.new(0, 4),
+	}, container)
 
-    return { value = valueLabel, subtitle = subtitleLabel }
+	local titleHeight = IsOnMobile and 16 or 14
+	local valueHeight = IsOnMobile and 26 or 24
+
+	local titleLabel = NAstatsUI.createInstance("TextLabel", {
+		Name = "TitleLabel",
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, titleHeight),
+		Font = T.Fonts.BodySemibold,
+		Text = titleText,
+		TextSize = IsOnMobile and 13 or 12,
+		TextColor3 = T.Colors.TextMuted,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		RichText = true,
+		Parent = container,
+	})
+
+	local valueLabel = NAstatsUI.createInstance("TextLabel", {
+		Name = "ValueLabel",
+		BackgroundTransparency = 1,
+		Position = UDim2.new(0, 0, 0, titleHeight + 2),
+		Size = UDim2.new(1, 0, 0, valueHeight),
+		Font = T.Fonts.BodyBold,
+		Text = "—",
+		TextSize = IsOnMobile and 23 or 21,
+		TextColor3 = T.Colors.TextSubtle,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		RichText = true,
+		Parent = container,
+	})
+
+	local subtitleLabel = NAstatsUI.createInstance("TextLabel", {
+		Name = "SubtitleLabel",
+		BackgroundTransparency = 1,
+		Position = UDim2.new(0, 0, 0, titleHeight + valueHeight + 4),
+		Size = UDim2.new(1, 0, 0, IsOnMobile and 16 or 14),
+		Font = T.Fonts.Body,
+		Text = subtitleText,
+		TextSize = IsOnMobile and 12 or 12,
+		TextColor3 = T.Colors.TextMuted,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		RichText = true,
+		Parent = container,
+	})
+
+	return { value = valueLabel, subtitle = subtitleLabel, title = titleLabel }
 end
 
 function NAstatsUI.createStatCommand(config)
-    return NAstatsUI.ensureSingle(config.key, function()
-        local baseHeight = IsOnMobile and 124 or 104
-        local ui = NAstatsUI.createWindow(config.position, UDim2.new(0, 240, 0, baseHeight), config.title)
-        local statDisplay = NAstatsUI.createStatDisplay(ui.content, config.title, config.subtitle)
-        local lastUpdate = 0
-        local updateInterval = 0.5
-        
-        local conn = RunService.RenderStepped:Connect(function(dt)
-            local now = os.clock()
-            if now - lastUpdate < updateInterval then return end
-            
-            local value, rawValue = config.updateFn(dt)
-            local color = config.colorFn(rawValue)
-            
-            statDisplay.value.Text = "<b>" .. value .. "</b>"
-            statDisplay.value.TextColor3 = color
-            
-            local collapsedText = Format("%s: <font color='%s'>%s</font>", config.title, NAstatsUI.colorToHex(color), value)
-            ui.setCollapsedTitle(collapsedText)
-            
-            lastUpdate = now
-        end)
-        NAlib.connect("UI:"..config.key, conn)
-        ui.closeFunction = function() NAlib.disconnect("UI:"..config.key) end
-        
-        return ui
-    end)
+	return NAstatsUI.ensureSingle(config.key, function()
+		local baseHeight = IsOnMobile and 120 or 110
+		local baseWidth = IsOnMobile and 230 or 210
+		local ui = NAstatsUI.createWindow(config.position, UDim2.new(0, baseWidth, 0, baseHeight), config.title)
+		local statDisplay = NAstatsUI.createStatDisplay(ui.content, config.title, config.subtitle)
+		local lastUpdate = 0
+		local updateInterval = 0.5
+
+		local conn = RunService.RenderStepped:Connect(function(dt)
+			local now = os.clock()
+			if now - lastUpdate < updateInterval then
+				return
+			end
+
+			local value, rawValue = config.updateFn(dt)
+			local color = config.colorFn(rawValue)
+
+			statDisplay.value.Text = "<b>"..value.."</b>"
+			statDisplay.value.TextColor3 = color
+
+			local collapsedText = Format("%s: <font color='%s'>%s</font>", config.title, NAstatsUI.colorToHex(color), value)
+			ui.setCollapsedTitle(collapsedText)
+
+			lastUpdate = now
+		end)
+		NAlib.connect("UI:"..config.key, conn)
+		ui.closeFunction = function()
+			NAlib.disconnect("UI:"..config.key)
+		end
+
+		return ui
+	end)
 end
 
 function NAstatsUI.createStatBox(parent, titleText)
-    local T = NAstatsUI.Theme
-    local box = NAstatsUI.createInstance("Frame", {
-        BackgroundColor3 = T.Colors.Secondary, Size = UDim2.new(0.5, -4, 0, IsOnMobile and 64 or 56), Parent = parent
-    })
-    NAstatsUI.createInstance("UICorner", { CornerRadius = T.Radius.Container }, box)
+	local T = NAstatsUI.Theme
+	local boxHeight = IsOnMobile and 76 or 68
+	local boxWidthScale = IsOnMobile and 1 or 0.5
+	local boxWidthOffset = IsOnMobile and 0 or -6
 
-    NAstatsUI.createInstance("TextLabel", {
-        Name = "Title", BackgroundTransparency = 1, Position = UDim2.new(0, 10, 0, 6), Size = UDim2.new(1, -20, 0, IsOnMobile and 22 or 20),
-        Font = T.Fonts.BodySemibold, Text = titleText, TextSize = IsOnMobile and 16 or 15, TextColor3 = T.Colors.Text,
-        TextXAlignment = Enum.TextXAlignment.Left, RichText = true, Parent = box
-    })
+	local box = NAstatsUI.createInstance("Frame", {
+		BackgroundColor3 = T.Colors.Secondary,
+		Size = UDim2.new(boxWidthScale, boxWidthOffset, 0, boxHeight),
+		Parent = parent,
+	})
+	NAstatsUI.createInstance("UICorner", { CornerRadius = T.Radius.Container }, box)
+	NAstatsUI.createInstance("UIStroke", {
+		Color = T.Colors.Border,
+		Thickness = 1,
+		ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	}, box)
 
-    local valueLabel = NAstatsUI.createInstance("TextLabel", {
-        Name = "Value", BackgroundTransparency = 1, Position = UDim2.new(0, 10, 0, IsOnMobile and 30 or 26),
-        Size = UDim2.new(1, -20, 0, IsOnMobile and 26 or 22), Font = T.Fonts.Body, Text = "—",
-        TextSize = IsOnMobile and 18 or 16, TextColor3 = T.Colors.TextMuted, TextXAlignment = Enum.TextXAlignment.Left,
-        RichText = true, Parent = box
-    })
-    return box, valueLabel
+	NAstatsUI.createInstance("UIPadding", {
+		PaddingTop = UDim.new(0, 8),
+		PaddingBottom = UDim.new(0, 8),
+		PaddingLeft = UDim.new(0, 10),
+		PaddingRight = UDim.new(0, 10),
+	}, box)
+
+	local titleHeight = IsOnMobile and 18 or 16
+	local valueHeight = IsOnMobile and 22 or 20
+
+	local title = NAstatsUI.createInstance("TextLabel", {
+		Name = "Title",
+		BackgroundTransparency = 1,
+		Position = UDim2.new(0, 0, 0, 0),
+		Size = UDim2.new(1, 0, 0, titleHeight),
+		Font = T.Fonts.BodySemibold,
+		Text = titleText,
+		TextSize = IsOnMobile and 14 or 13,
+		TextColor3 = T.Colors.TextMuted,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		RichText = true,
+		Parent = box,
+	})
+
+	local valueLabel = NAstatsUI.createInstance("TextLabel", {
+		Name = "Value",
+		BackgroundTransparency = 1,
+		Position = UDim2.new(0, 0, 0, titleHeight + 2),
+		Size = UDim2.new(1, 0, 0, valueHeight),
+		Font = T.Fonts.BodyBold,
+		Text = "—",
+		TextSize = IsOnMobile and 18 or 16,
+		TextColor3 = T.Colors.TextSubtle,
+		TextXAlignment = Enum.TextXAlignment.Right,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		RichText = true,
+		Parent = box,
+	})
+
+	local barBg = NAstatsUI.createInstance("Frame", {
+		Name = "BarBg",
+		BackgroundColor3 = Color3.fromRGB(18, 20, 30),
+		BorderSizePixel = 0,
+		AnchorPoint = Vector2.new(0, 1),
+		Position = UDim2.new(0, 0, 1, 0),
+		Size = UDim2.new(1, 0, 0, 3),
+		Parent = box,
+	})
+	NAstatsUI.createInstance("UICorner", { CornerRadius = UDim.new(0, 2) }, barBg)
+
+	local bar = NAstatsUI.createInstance("Frame", {
+		Name = "Bar",
+		BackgroundColor3 = T.Colors.Accent,
+		BorderSizePixel = 0,
+		Size = UDim2.new(0, 0, 1, 0),
+		Parent = barBg,
+	})
+	NAstatsUI.createInstance("UICorner", { CornerRadius = UDim.new(0, 2) }, bar)
+
+	return box, valueLabel, bar
 end
 
-cmd.add({"ping"}, {"ping", "Shows your network latency"}, function()
-    local T = NAstatsUI.Theme
-    NAstatsUI.createStatCommand({
-        key = "Ping", title = "Ping", subtitle = "Network latency", position = UDim2.new(0.5, 0, 0.22, 0),
-        updateFn = function()
-            local pingItem = StatsService.Network.ServerStatsItem["Data Ping"]
-            local rawPing = tonumber(pingItem:GetValueString():match("%d+")) or 0
-            return tostring(rawPing) .. " ms", rawPing
-        end,
-        colorFn = function(ping)
-            if ping <= 50 then return T.Colors.Good end
-            if ping <= 100 then return T.Colors.Warn end
-            return T.Colors.Bad
-        end,
-    })
+cmd.add({ "ping" }, { "ping", "Shows your network latency" }, function()
+	local T = NAstatsUI.Theme
+	NAstatsUI.createStatCommand({
+		key = "Ping",
+		title = "Ping",
+		subtitle = "Network latency",
+		position = UDim2.new(0.5, 0, 0.22, 0),
+		updateFn = function()
+			local pingItem = StatsService.Network.ServerStatsItem["Data Ping"]
+			local rawPing = tonumber(pingItem:GetValueString():match("%d+")) or 0
+			return tostring(rawPing).." ms", rawPing
+		end,
+		colorFn = function(ping)
+			if ping <= 50 then
+				return T.Colors.Good
+			end
+			if ping <= 100 then
+				return T.Colors.Warn
+			end
+			return T.Colors.Bad
+		end,
+	})
 end)
 
-cmd.add({"fps"}, {"fps", "Shows your frames per second"}, function()
-    local T = NAstatsUI.Theme
-    local frameHistory = {}
-    
-    NAstatsUI.createStatCommand({
-        key = "FPS", title = "FPS", subtitle = "Frames per second", position = UDim2.new(0.5, 0, 0.38, 0),
-        updateFn = function(dt)
-            Insert(frameHistory, dt)
-            if #frameHistory > 60 then table.remove(frameHistory, 1) end
-            
-            local sum = 0
-            for _, frameTime in ipairs(frameHistory) do sum += frameTime end
-            local avg = sum / math.max(1, #frameHistory)
-            local fps = math.floor(1 / avg + 0.5)
-            
-            return tostring(fps), fps
-        end,
-        colorFn = function(fps)
-            if fps >= 55 then return T.Colors.Good end
-            if fps >= 30 then return T.Colors.Warn end
-            return T.Colors.Bad
-        end,
-    })
+cmd.add({ "fps" }, { "fps", "Shows your frames per second" }, function()
+	local T = NAstatsUI.Theme
+	local frameHistory = {}
+
+	NAstatsUI.createStatCommand({
+		key = "FPS",
+		title = "FPS",
+		subtitle = "Frames per second",
+		position = UDim2.new(0.5, 0, 0.36, 0),
+		updateFn = function(dt)
+			Insert(frameHistory, dt)
+			if #frameHistory > 60 then
+				table.remove(frameHistory, 1)
+			end
+
+			local sum = 0
+			for _, frameTime in ipairs(frameHistory) do
+				sum += frameTime
+			end
+			local avg = sum / math.max(1, #frameHistory)
+			local fps = math.floor(1 / avg + 0.5)
+
+			return tostring(fps), fps
+		end,
+		colorFn = function(fps)
+			if fps >= 55 then
+				return T.Colors.Good
+			end
+			if fps >= 30 then
+				return T.Colors.Warn
+			end
+			return T.Colors.Bad
+		end,
+	})
 end)
 
-cmd.add({"stats"}, {"stats", "Shows both FPS and ping"}, function()
-    NAstatsUI.ensureSingle("Stats", function()
-        local ui = NAstatsUI.createWindow(UDim2.new(0.5, 0, 0.3, 0), UDim2.new(0, 300, 0, IsOnMobile and 160 or 140), "Stats")
-        local T = NAstatsUI.Theme
+cmd.add({ "stats" }, { "stats", "Shows both FPS and ping" }, function()
+	local existing = windowRegistry["Stats"]
+	if existing and existing.screenGui and existing.screenGui.Parent then
+		NAlib.disconnect("UI:Stats")
+		existing.screenGui:Destroy()
+		windowRegistry["Stats"] = nil
+	end
 
-        local grid = NAstatsUI.createInstance("Frame", {
-            BackgroundTransparency = 1, Size = UDim2.new(1, 0, 1, 0), Parent = ui.content
-        })
-        local layout = NAstatsUI.createInstance("UIListLayout", {
-            FillDirection = Enum.FillDirection.Horizontal, HorizontalAlignment = Enum.HorizontalAlignment.Center,
-            VerticalAlignment = Enum.VerticalAlignment.Top, SortOrder = Enum.SortOrder.LayoutOrder,
-            Padding = UDim.new(0, 8), Parent = grid,
-        })
+	local T = NAstatsUI.Theme
+	local height = IsOnMobile and 180 or 150
+	local width = IsOnMobile and 300 or 270
+	local ui = NAstatsUI.createWindow(UDim2.new(0.5, 0, 0.32, 0), UDim2.new(0, width, 0, height), "Stats")
 
-        local pingBox, pingValue = NAstatsUI.createStatBox(grid, "Ping")
-        local fpsBox, fpsValue = NAstatsUI.createStatBox(grid, "FPS")
+	windowRegistry["Stats"] = ui
 
-        local frames, lastUpdate, updateInterval = {}, 0, 0.5
-        local pingColorFn = function(p) if p <= 50 then return T.Colors.Good end; if p <= 100 then return T.Colors.Warn end; return T.Colors.Bad end
-        local fpsColorFn = function(f) if f >= 55 then return T.Colors.Good end; if f >= 30 then return T.Colors.Warn end; return T.Colors.Bad end
-        
-        local conn = RunService.RenderStepped:Connect(function(dt)
-            Insert(frames, dt)
-            if #frames > 60 then table.remove(frames, 1) end
-            local t = os.clock()
-            if t - lastUpdate < updateInterval then return end
+	local grid = NAstatsUI.createInstance("Frame", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 1, 0),
+		Parent = ui.content
+	})
 
-            local sum = 0
-            for i = 1, #frames do sum += frames[i] end
-            local avg = sum / math.max(1, #frames)
-            local fps = math.max(1, math.floor(1 / avg + 0.5))
+	local layout = NAstatsUI.createInstance("UIListLayout", {
+		FillDirection = IsOnMobile and Enum.FillDirection.Vertical or Enum.FillDirection.Horizontal,
+		HorizontalAlignment = Enum.HorizontalAlignment.Center,
+		VerticalAlignment = Enum.VerticalAlignment.Top,
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Padding = UDim.new(0, IsOnMobile and 8 or 10),
+		Parent = grid,
+	})
 
-            local pingItem = StatsService.Network.ServerStatsItem["Data Ping"]
-            local p = tonumber(pingItem:GetValueString():match("%d+")) or 0
+	local pingBox, pingValue, pingBar = NAstatsUI.createStatBox(grid, "Ping")
+	local fpsBox, fpsValue, fpsBar = NAstatsUI.createStatBox(grid, "FPS")
 
-            pingValue.Text = "<b>" .. tostring(p) .. " ms</b>"
-            pingValue.TextColor3 = pingColorFn(p)
-            fpsValue.Text = "<b>" .. tostring(fps) .. "</b>"
-            fpsValue.TextColor3 = fpsColorFn(fps)
-            
-            local collapsedTitle = Format("Stats: <font color='%s'>%d ms</font> | <font color='%s'>%d FPS</font>", NAstatsUI.colorToHex(pingColorFn(p)), p, NAstatsUI.colorToHex(fpsColorFn(fps)), fps)
-            ui.setCollapsedTitle(collapsedTitle)
-            lastUpdate = t
-        end)
-        NAlib.connect("UI:Stats", conn)
-        ui.closeFunction = function() NAlib.disconnect("UI:Stats") end
-        
-        return ui
-    end)
+	pingBox.LayoutOrder = 1
+	fpsBox.LayoutOrder = 2
+
+	local frames = {}
+	local lastUpdate = 0
+	local updateInterval = 0.5
+
+	local pingColorFn = function(p)
+		if p <= 50 then
+			return T.Colors.Good
+		end
+		if p <= 100 then
+			return T.Colors.Warn
+		end
+		return T.Colors.Bad
+	end
+
+	local fpsColorFn = function(f)
+		if f >= 55 then
+			return T.Colors.Good
+		end
+		if f >= 30 then
+			return T.Colors.Warn
+		end
+		return T.Colors.Bad
+	end
+
+	local conn = RunService.RenderStepped:Connect(function(dt)
+		Insert(frames, dt)
+		if #frames > 60 then
+			table.remove(frames, 1)
+		end
+		local t = os.clock()
+		if t - lastUpdate < updateInterval then
+			return
+		end
+
+		local sum = 0
+		for i = 1, #frames do
+			sum += frames[i]
+		end
+		local avg = sum / math.max(1, #frames)
+		local fps = math.max(1, math.floor(1 / avg + 0.5))
+
+		local pingItem = StatsService.Network.ServerStatsItem["Data Ping"]
+		local p = tonumber(pingItem:GetValueString():match("%d+")) or 0
+
+		pingValue.Text = "<b>"..tostring(p).." ms</b>"
+		pingValue.TextColor3 = pingColorFn(p)
+		fpsValue.Text = "<b>"..tostring(fps).."</b>"
+		fpsValue.TextColor3 = fpsColorFn(fps)
+
+		local pingRatio = math.clamp(p == 0 and 0 or 1 - (p / 300), 0, 1)
+		local fpsRatio = math.clamp(fps / 120, 0, 1)
+
+		pingBar.Size = UDim2.new(pingRatio, 0, 1, 0)
+		pingBar.BackgroundColor3 = pingColorFn(p)
+		fpsBar.Size = UDim2.new(fpsRatio, 0, 1, 0)
+		fpsBar.BackgroundColor3 = fpsColorFn(fps)
+
+		local collapsedTitle = Format(
+			"Stats: <font color='%s'>%d ms</font> | <font color='%s'>%d FPS</font>",
+			NAstatsUI.colorToHex(pingColorFn(p)),
+			p,
+			NAstatsUI.colorToHex(fpsColorFn(fps)),
+			fps
+		)
+		ui.setCollapsedTitle(collapsedTitle)
+		lastUpdate = t
+	end)
+	NAlib.connect("UI:Stats", conn)
+
+	ui.closeButton.MouseButton1Click:Connect(function()
+		NAlib.disconnect("UI:Stats")
+		if windowRegistry["Stats"] == ui then
+			windowRegistry["Stats"] = nil
+		end
+		ui.screenGui:Destroy()
+	end)
 end)
 
 cmd.add({"commands","cmds"},{"commands","Open the command list"},function()
@@ -9501,22 +14383,23 @@ end)
 
 --Mobile Commands for the screen
 if IsOnMobile then
-	cmd.add({"SensorRotationScreen","SensorScreen","SenScreen"},{"SensorRotaionScreen (SensorScreen or SenScreen)","Changes ScreenOrientation to Sensor"},function()
+	cmd.add({"sensorrotationscreen","sensorscreen","senscreen"},{"sensorrotationscreen","Changes ScreenOrientation to Sensor"},function()
 		PlrGui.ScreenOrientation=Enum.ScreenOrientation.Sensor
 	end)
 
-	cmd.add({"LandscapeRotationScreen","LandscapeScreen","LandScreen"},{"LandscapeRotaionScreen (LandscapeScreen or LandScreen)","Changes ScreenOrientation to Landscape Sensor"},function()
+	cmd.add({"landscaperotationscreen","landscapescreen","landscreen"},{"landscaperotationscreen","Changes ScreenOrientation to Landscape Sensor"},function()
 		PlrGui.ScreenOrientation=Enum.ScreenOrientation.LandscapeSensor
 	end)
 
-	cmd.add({"PortraitRotationScreen","PortraitScreen","Portscreen"},{"PortraitRotaionScreen (PortraitScreen or Portscreen)","Changes ScreenOrientation to Portrait"},function()
+	cmd.add({"portraitrotationscreen","portraitscreen","portscreen"},{"portraitrotationscreen","Changes ScreenOrientation to Portrait"},function()
 		PlrGui.ScreenOrientation=Enum.ScreenOrientation.Portrait
 	end)
 
-	cmd.add({"DefaultRotaionScreen","DefaultScreen","Defscreen"},{"DefaultRotaionScreen (DefaultScreen or Defscreen)","Changes ScreenOrientation to Portrait"},function()
+	cmd.add({"defaultrotaionscreen","defaultscreen","defscreen"},{"defaultrotaionscreen","Changes ScreenOrientation to Portrait"},function()
 		PlrGui.ScreenOrientation=StarterGui.ScreenOrientation
 	end)
 end
+
 cmd.add({"commandcount","cc"},{"commandcount (cc)","Counds how many commands NA has"},function()
 	DoNotif(adminName.." currently has "..commandcount.." commands")
 end)
@@ -9633,6 +14516,17 @@ cmd.add({"rjre", "rejoinrefresh"}, {"rjre (rejoinrefresh)", "Rejoins and telepor
 		end
 
 		cmd.run({"rj"})
+	end
+end)
+
+cmd.add({"cancelteleport","canceltp"},{"cancelteleport (canceltp)","Cancel an in-progress teleport"},function()
+	local ok,err=pcall(function()
+		TeleportService:TeleportCancel()
+	end)
+	if ok then
+		DoNotif("Cancelled pending teleports.",2)
+	else
+		DoNotif("Failed to cancel teleport: "..tostring(err),3)
 	end
 end)
 
@@ -10426,22 +15320,42 @@ end)
 
 cmd.add({"droptools"}, {"dropalltools", "Drop all of your tools"}, function()
 	local backpack = getBp()
-	local dropped = 0
+	local character = getChar()
+	if not character then
+		return DebugNotif("Character not available", 4)
+	end
 
-	if backpack then
-		for _, tool in ipairs(backpack:GetChildren()) do
+	local queue = {}
+	local function collect(from)
+		if not from then return end
+		for _, tool in ipairs(from:GetChildren()) do
 			if tool:IsA("Tool") and NAlib.isProperty(tool, "CanBeDropped") == true then
-				tool.Parent = getChar()
+				Insert(queue, tool)
 			end
 		end
 	end
 
-	Wait()
+	collect(character)
+	collect(backpack)
 
-	for _, tool in ipairs(getChar():GetChildren()) do
-		if tool:IsA("Tool") and NAlib.isProperty(tool, "CanBeDropped") == true then
-			tool.Parent = workspace
-			dropped += 1
+	if #queue == 0 then
+		return DebugNotif("No droppable tools found", 4)
+	end
+
+	local dropped = 0
+
+	for _, tool in ipairs(queue) do
+		if tool and tool.Parent then
+			if tool.Parent == backpack then
+				tool.Parent = character
+				Wait()
+			end
+
+			if tool.Parent == character then
+				tool.Parent = workspace
+				dropped += 1
+				Wait(.05)
+			end
 		end
 	end
 
@@ -10527,8 +15441,39 @@ cmd.add({"fpsbooster","lowgraphics","boostfps","lowg"},{"fpsbooster","Enables ma
 
 	local active=false
 	local cons={}
+	local watchers=setmetatable({}, {__mode="k"})
 	local function connect(sig,fn)local c=sig:Connect(fn);Insert(cons,c);return c end
-	local function disconnectAll()for _,c in ipairs(cons) do pcall(function() c:Disconnect() end) end;cons={} end
+	local function disconnectAll()
+		for _,c in ipairs(cons) do pcall(function() c:Disconnect() end) end
+		cons={}
+		watchers=setmetatable({}, {__mode="k"})
+	end
+	local function forceProperty(inst,prop,desired)
+		if not inst then return end
+		local bucket=watchers[inst]
+		if not bucket then
+			bucket={}
+			watchers[inst]=bucket
+		end
+		local function apply()
+			if not active then return end
+			local current=st.safeGet(inst,prop)
+			if current~=nil and current~=desired then
+				st.safeSet(inst,prop,desired)
+			end
+		end
+		apply()
+		if bucket[prop] then return end
+		local ok,conn=pcall(function()
+			return inst:GetPropertyChangedSignal(prop):Connect(function()
+				apply()
+			end)
+		end)
+		if ok and conn then
+			bucket[prop]=conn
+			Insert(cons,conn)
+		end
+	end
 
 	local A="NA_FPS_"
 	local function remember(inst,prop,val)
@@ -10641,6 +15586,19 @@ cmd.add({"fpsbooster","lowgraphics","boostfps","lowg"},{"fpsbooster","Enables ma
 		if inst:IsA("Beam") then remember(inst,"Enabled",st.safeGet(inst,"Enabled")); if st.safeGet(inst,"Enabled")~=nil then st.safeSet(inst,"Enabled",false) end end
 		if inst:IsA("PointLight") or inst:IsA("SurfaceLight") or inst:IsA("SpotLight") then remember(inst,"Enabled",inst.Enabled); st.safeSet(inst,"Enabled",false) end
 		if inst:IsA("SurfaceAppearance") or inst:IsA("Highlight") then remember(inst,"Enabled",st.safeGet(inst,"Enabled")); if st.safeGet(inst,"Enabled")~=nil then st.safeSet(inst,"Enabled",false) end end
+		if inst:IsA("PostEffect") then
+			local enabledValue=st.safeGet(inst,"Enabled")
+			if enabledValue~=nil then remember(inst,"Enabled",enabledValue) end
+			forceProperty(inst,"Enabled",false)
+		end
+		if inst:IsA("Atmosphere") then
+			local density=st.safeGet(inst,"Density")
+			if density~=nil then remember(inst,"Density",density); forceProperty(inst,"Density",0) end
+			local haze=st.safeGet(inst,"Haze")
+			if haze~=nil then remember(inst,"Haze",haze); forceProperty(inst,"Haze",0) end
+			local glare=st.safeGet(inst,"Glare")
+			if glare~=nil then remember(inst,"Glare",glare); forceProperty(inst,"Glare",0) end
+		end
 		if inst:IsA("Explosion") then remember(inst,"BlastPressure",inst.BlastPressure); remember(inst,"BlastRadius",inst.BlastRadius); st.safeSet(inst,"BlastPressure",1); st.safeSet(inst,"BlastRadius",1) end
 	end
 
@@ -10658,6 +15616,12 @@ cmd.add({"fpsbooster","lowgraphics","boostfps","lowg"},{"fpsbooster","Enables ma
 		if inst:IsA("Beam") then local e=recall(inst,"Enabled"); if e~=nil then st.safeSet(inst,"Enabled",e) clearAttr(inst,"Enabled") end end
 		if inst:IsA("PointLight") or inst:IsA("SurfaceLight") or inst:IsA("SpotLight") then local e=recall(inst,"Enabled"); if e~=nil then st.safeSet(inst,"Enabled",e) clearAttr(inst,"Enabled") end end
 		if inst:IsA("SurfaceAppearance") or inst:IsA("Highlight") then local e=recall(inst,"Enabled"); if e~=nil then st.safeSet(inst,"Enabled",e) clearAttr(inst,"Enabled") end end
+		if inst:IsA("PostEffect") then local e=recall(inst,"Enabled"); if e~=nil then st.safeSet(inst,"Enabled",e) clearAttr(inst,"Enabled") end end
+		if inst:IsA("Atmosphere") then
+			local d=recall(inst,"Density"); if d~=nil then st.safeSet(inst,"Density",d) clearAttr(inst,"Density") end
+			local h=recall(inst,"Haze"); if h~=nil then st.safeSet(inst,"Haze",h) clearAttr(inst,"Haze") end
+			local g=recall(inst,"Glare"); if g~=nil then st.safeSet(inst,"Glare",g) clearAttr(inst,"Glare") end
+		end
 		if inst:IsA("Explosion") then local bp=recall(inst,"BlastPressure"); if bp~=nil then st.safeSet(inst,"BlastPressure",bp) clearAttr(inst,"BlastPressure") end local br=recall(inst,"BlastRadius"); if br~=nil then st.safeSet(inst,"BlastRadius",br) clearAttr(inst,"BlastRadius") end end
 	end
 
@@ -10999,6 +15963,73 @@ cmd.add({"uninvisibleparts","uninvisparts"},{"uninvisibleparts (uninvisparts)","
 		end
 	end
 	table.clear(shownParts)
+end)
+
+cmd.add({"datalimit"},{"datalimit <kbps>","Set outgoing bandwidth limit in KBps"},function(value)
+	local limit=tonumber(value)
+	if not limit then
+		DoNotif("Usage: datalimit <number>",2)
+		return
+	end
+	local networkClient=SafeGetService("NetworkClient")
+	if not networkClient then
+		DoNotif("NetworkClient unavailable",3)
+		return
+	end
+	local ok,err=pcall(function()
+		networkClient:SetOutgoingKBPSLimit(limit)
+	end)
+	if ok then
+		DoNotif("Outgoing limit set to "..tostring(limit).." kbps",2)
+	else
+		DoNotif("Failed to set limit: "..tostring(err),3)
+	end
+end,true)
+
+cmd.add({"removeads","adblock"},{"removeads (adblock)","Continuously removes billboard advertisements"},function()
+	if NAStuff._removeAdsLoop and NAStuff._removeAdsLoop.active then
+		DoNotif("Remove Ads already enabled",2)
+		return
+	end
+	local state={active=true}
+	NAStuff._removeAdsLoop=state
+	DoNotif("Remove Ads enabled",2)
+	SpawnCall(function()
+		while state.active do
+			pcall(function()
+				for _,obj in ipairs(workspace:GetDescendants()) do
+					if obj:IsA("PackageLink") then
+						local parent=obj.Parent
+						if parent then
+							if parent:FindFirstChild("ADpart") then
+								parent:Destroy()
+							elseif parent:FindFirstChild("AdGuiAdornee") then
+								local grand=parent.Parent
+								if grand then
+									grand:Destroy()
+								else
+									parent:Destroy()
+								end
+							end
+						end
+					end
+				end
+			end)
+			Wait(0.75)
+		end
+	end)
+end)
+
+cmd.add({"unremoveads","noadblock","disableads"},{"unremoveads (noadblock,disableads)","Stop removing billboard advertisements"},function()
+	local state=NAStuff._removeAdsLoop
+	if not state or not state.active then
+		DoNotif("Remove Ads is not active",2)
+		NAStuff._removeAdsLoop=nil
+		return
+	end
+	state.active=false
+	NAStuff._removeAdsLoop=nil
+	DoNotif("Remove Ads disabled",2)
 end)
 
 cmd.add({"replicationlag", "backtrack"}, {"replicationlag (backtrack)", "Set IncomingReplicationLag"}, function(num)
@@ -12289,7 +17320,7 @@ cmd.add({"setspawn", "spawnpoint", "ss"}, {"setspawn (spawnpoint, ss)", "Sets yo
 
 	function handleRespawn()
 		if stationaryRespawn and getHum() and getHum().Health == 0 then
-			if not hasPosition then
+			if not hasPosition and (getChar() and getRoot(getChar())) then
 				spawnPosition = getRoot(getChar()).CFrame
 				hasPosition = true
 			end
@@ -12888,78 +17919,142 @@ end)
 cmd.add({"antifling"},{"antifling","makes other players non-collidable with you"},function()
 	NAlib.disconnect("antifling")
 	NAlib.disconnect("antifling_players")
-	NAStuff._afTracked = NAStuff._afTracked or setmetatable({}, {__mode="k"})
-	NAStuff._afOrigCan = NAStuff._afOrigCan or setmetatable({}, {__mode="k"})
-	NAStuff._afSignals = NAStuff._afSignals or setmetatable({}, {__mode="k"})
-	local tracked, orig, sigs = NAStuff._afTracked, NAStuff._afOrigCan, NAStuff._afSignals
-	local lp = Players.LocalPlayer
 
-	local apply = function(p)
-		if not (p and p:IsA("BasePart")) or tracked[p] then return end
-		if orig[p] == nil then orig[p] = NAlib.isProperty(p,"CanCollide") end
-		if NAlib.isProperty(p,"CanCollide") ~= false then NAlib.setProperty(p,"CanCollide", false) end
-		tracked[p] = true
-		if not sigs[p] then
-			local c = p:GetPropertyChangedSignal("CanCollide"):Connect(function()
-				if NAlib.isProperty(p,"CanCollide") ~= false then NAlib.setProperty(p,"CanCollide", false) end
-			end)
-			sigs[p] = c
-			NAlib.connect("antifling", c)
+	NAStuff._afTracked = NAStuff._afTracked or setmetatable({}, {__mode = "k"})
+	NAStuff._afOrigCan = NAStuff._afOrigCan or setmetatable({}, {__mode = "k"})
+	NAStuff._afSignals = NAStuff._afSignals or setmetatable({}, {__mode = "k"})
+
+	local tracked = NAStuff._afTracked
+	local orig = NAStuff._afOrigCan
+	local sigs = NAStuff._afSignals
+
+	local lp = Players.LocalPlayer
+	if not lp then
+		DebugNotif("Antifling: LocalPlayer missing")
+		return
+	end
+
+	local function clearPart(p)
+		if tracked[p] then
+			tracked[p] = nil
+		end
+		if orig[p] ~= nil then
+			orig[p] = nil
+		end
+		if sigs[p] then
+			local c = sigs[p]
+			sigs[p] = nil
+			if c and c.Disconnect then
+				c:Disconnect()
+			end
 		end
 	end
 
-	local seedChar = function(char)
-		if not char then return end
-		for _,d in ipairs(char:GetDescendants()) do
-			if d:IsA("BasePart") then apply(d) end
+	local function apply(p)
+		if not (p and typeof(p) == "Instance" and p:IsA("BasePart")) or tracked[p] then
+			return
+		end
+		tracked[p] = true
+		if orig[p] == nil then
+			orig[p] = NAlib.isProperty(p, "CanCollide")
+		end
+		if not sigs[p] then
+			sigs[p] = p:GetPropertyChangedSignal("CanCollide"):Connect(function()
+				if tracked[p] and NAlib.isProperty(p, "CanCollide") ~= false then
+					NAlib.setProperty(p, "CanCollide", false)
+				end
+			end)
+		end
+		if NAlib.isProperty(p, "CanCollide") ~= false then
+			NAlib.setProperty(p, "CanCollide", false)
+		end
+	end
+
+	local function seedChar(char)
+		if not char then
+			return
+		end
+		for _, d in ipairs(char:GetDescendants()) do
+			if d:IsA("BasePart") then
+				apply(d)
+			end
 		end
 		NAlib.connect("antifling", char.DescendantAdded:Connect(function(inst)
-			if inst:IsA("BasePart") then apply(inst) end
+			if inst:IsA("BasePart") then
+				apply(inst)
+			end
 		end))
 		NAlib.connect("antifling", char.DescendantRemoving:Connect(function(inst)
-			if tracked[inst] then
-				if sigs[inst] then sigs[inst]:Disconnect(); sigs[inst] = nil end
-				tracked[inst] = nil
-				orig[inst] = nil
+			if inst:IsA("BasePart") then
+				clearPart(inst)
 			end
 		end))
 	end
 
-	local hookOther = function(plr)
-		if plr == lp then return end
-		if plr.Character then seedChar(plr.Character) end
-		NAlib.connect("antifling_players", plr.CharacterAdded:Connect(seedChar))
-		NAlib.connect("antifling_players", plr.CharacterRemoving:Connect(function(char)
-			for _,d in ipairs(char:GetDescendants()) do
-				if tracked[d] then
-					if sigs[d] then sigs[d]:Disconnect(); sigs[d] = nil end
-					tracked[d] = nil
-					orig[d] = nil
-				end
-			end
-		end))
-	end
-
-	for _,pl in ipairs(Players:GetPlayers()) do hookOther(pl) end
-	NAlib.connect("antifling_players", Players.PlayerAdded:Connect(hookOther))
-	NAlib.connect("antifling_players", Players.PlayerRemoving:Connect(function(pl)
-		if pl == lp then return end
-		local char = pl.Character
-		if not char then return end
-		for _,d in ipairs(char:GetDescendants()) do
+	local function cleanupChar(char)
+		if not char then
+			return
+		end
+		for _, d in ipairs(char:GetDescendants()) do
 			if tracked[d] then
-				if sigs[d] then sigs[d]:Disconnect(); sigs[d] = nil end
-				tracked[d] = nil
-				orig[d] = nil
+				clearPart(d)
 			end
 		end
+	end
+
+	local function hookOther(plr)
+		if plr == lp then
+			return
+		end
+		if plr.Character then
+			seedChar(plr.Character)
+		end
+		NAlib.connect("antifling_players", plr.CharacterAdded:Connect(function(char)
+			seedChar(char)
+		end))
+		NAlib.connect("antifling_players", plr.CharacterRemoving:Connect(function(char)
+			cleanupChar(char)
+		end))
+	end
+
+	for _, pl in ipairs(Players:GetPlayers()) do
+		hookOther(pl)
+	end
+
+	NAlib.connect("antifling_players", Players.PlayerAdded:Connect(hookOther))
+	NAlib.connect("antifling_players", Players.PlayerRemoving:Connect(function(pl)
+		if pl == lp then
+			return
+		end
+		cleanupChar(pl.Character)
 	end))
 
+	local lastKey = nil
+	local quotaPerStep = 256
+
 	NAlib.connect("antifling", RunService.Stepped:Connect(function()
-		for p in pairs(tracked) do
-			if typeof(p)=="Instance" and p:IsA("BasePart") and p.Parent then
-				if p.CanCollide ~= false then NAlib.setProperty(p,"CanCollide", false) end
+		local t = tracked
+		if not t then
+			return
+		end
+		local quota = quotaPerStep
+		local k = lastKey
+		while quota > 0 do
+			k = next(t, k)
+			if not k then
+				lastKey = nil
+				break
 			end
+			local p = k
+			if typeof(p) == "Instance" and p:IsA("BasePart") and p.Parent then
+				if NAlib.isProperty(p, "CanCollide") ~= false then
+					NAlib.setProperty(p, "CanCollide", false)
+				end
+			else
+				clearPart(p)
+			end
+			lastKey = p
+			quota = quota - 1
 		end
 	end))
 
@@ -12969,19 +18064,37 @@ end)
 cmd.add({"unantifling"},{"unantifling","restores collision for other players"},function()
 	NAlib.disconnect("antifling")
 	NAlib.disconnect("antifling_players")
+
 	local tracked = NAStuff._afTracked or {}
 	local orig = NAStuff._afOrigCan or {}
 	local sigs = NAStuff._afSignals or {}
+
 	for p in pairs(tracked) do
-		if typeof(p)=="Instance" and p:IsA("BasePart") then
-			local v = orig[p]; if v == nil then v = true end
-			NAlib.setProperty(p,"CanCollide", v)
+		if typeof(p) == "Instance" and p:IsA("BasePart") then
+			local v = orig[p]
+			if v == nil then
+				v = true
+			end
+			NAlib.setProperty(p, "CanCollide", v)
 		end
 	end
-	for _,c in pairs(sigs) do if c then c:Disconnect() end end
-	for k in pairs(sigs) do sigs[k]=nil end
-	for k in pairs(tracked) do tracked[k]=nil end
-	for k in pairs(orig) do orig[k]=nil end
+
+	for _, c in pairs(sigs) do
+		if c and c.Disconnect then
+			c:Disconnect()
+		end
+	end
+
+	for k in pairs(sigs) do
+		sigs[k] = nil
+	end
+	for k in pairs(tracked) do
+		tracked[k] = nil
+	end
+	for k in pairs(orig) do
+		orig[k] = nil
+	end
+
 	DebugNotif("Antifling Disabled")
 end)
 
@@ -14840,8 +19953,33 @@ cmd.add({"unbubblechat","unbchat"},{"unbubblechat (unbchat)","Disabled BubbleCha
 	NAmanage.ApplyTextChatSettings()
 end)
 
+cmd.add({"hideicon","iconhide"},{"hideicon","Hides the NA icon"},function()
+	if NAmanage.IconSetInvisible then
+		NAmanage.IconSetInvisible(true)
+	end
+end)
+
+cmd.add({"showicon","iconshow"},{"showicon","Shows the NA icon"},function()
+	if NAmanage.IconSetInvisible then
+		NAmanage.IconSetInvisible(false)
+	end
+end)
+
+cmd.add({"lockiconposition","lockicon"},{"lockiconposition","Locks the NA icon's position (can't be dragged)"},function()
+	if NAgui.setIconLocked then
+		NAgui.setIconLocked(true)
+	end
+end)
+
+cmd.add({"unlockiconposition","unlockicon"},{"unlockiconposition","Unlocks the NA icon's position (can be dragged again)"},function()
+	if NAgui.setIconLocked then
+		NAgui.setIconLocked(false)
+	end
+end)
+
 cmd.add({"saveinstance","savegame"},{"saveinstance (savegame)","if it bugs out try removing stuff from your AutoExec folder"},function()
 	--saveinstance({})
+	if saveinstance then saveinstance() return end
 	local Params={
 		RepoURL="https://raw.githubusercontent.com/luau/SynSaveInstance/main/",
 		SSI="saveinstance",
@@ -18203,9 +23341,22 @@ cmd.add({"commitoof", "suicide", "kys"}, {"commitoof (suicide, kys)", "Triggers 
 	cmd.run({'die'})
 end)
 
-cmd.add({"volume","vol"},{"volume <1-10> (vol)","Changes your volume"},function(vol)
-	amount=vol/10
+cmd.add({"volume","vol"},{"volume <0-10> (vol)","Changes your volume"},function(vol)
+	if not vol then return DoNotif("please provide a number between 0-10",2) end
+	local amount=math.clamp(vol, 0, 10)
 	UserSettings():GetService("UserGameSettings").MasterVolume=amount
+end,true)
+
+cmd.add({"perfstats"},{"perfstats <on/off>","Shows or hides performance stats"},function(t)
+	local s=UserSettings():GetService("UserGameSettings")
+	local a=tostring(t or ""):lower()
+	pcall(function() s.PerformanceStatsVisible=(a=="on" or a=="true" or a=="1") end)
+end,true)
+
+cmd.add({"preftransparency","prefalpha"},{"preftransparency <0-15>","Preferred UI transparency"},function(v)
+	local s=UserSettings():GetService("UserGameSettings")
+	local n=math.clamp(tonumber(v) or 0,0,15)
+	pcall(function() s.PreferredTransparency=n end)
 end,true)
 
 cmd.add({"sensitivity","sens"},{"sensitivity <1-10> (sens)","Changes your sensitivity"},function(ss)
@@ -18336,6 +23487,61 @@ NAmanage._applyFixedDescription=function(desc,uidFallback)
 	if not char:FindFirstChildOfClass("ShirtGraphic") then local gid=desc.GraphicTShirt or desc.TShirt;if gid and gid>0 then local g=InstanceNew("ShirtGraphic");g.Graphic="rbxassetid://"..gid;g.Parent=char end end
 	if hum.RigType==Enum.HumanoidRigType.R6 and uidFallback then local okA3,ap=pcall(Players.GetCharacterAppearanceAsync,Players,uidFallback);if okA3 and ap then for _,v in ipairs(ap:GetDescendants()) do if v:IsA("CharacterMesh") then v:Clone().Parent=char end end end end
 end
+
+cmd.add({"team"},{"team <team name>","Changes your team (for the client)"},function(...)
+	local args={...}
+	local teamName=Concat(args," ")
+	teamName=teamName and teamName:gsub("^%s+",""):gsub("%s+$","") or""
+	if teamName=="" then DoNotif("team <team name>",3,"Team") return end
+	local teamsService=SafeGetService("Teams")
+	if not teamsService then return end
+	local lookup=Lower(teamName)
+	local targetTeam=nil
+	for _,team in ipairs(teamsService:GetChildren()) do
+		if Lower(team.Name):find(lookup,1,true) then targetTeam=team break end
+	end
+	if not targetTeam then DoNotif(Format("Invalid team \"%s\"",teamName),3,"Team") return end
+	local localPlayer=Players.LocalPlayer
+	if not localPlayer then return end
+	local character=getChar()
+	local root=character and getRoot(character)
+	local function assignTeam()
+		pcall(function()
+			localPlayer.Neutral=false
+			localPlayer.Team=targetTeam
+		end)
+	end
+	if typeof(firetouchinterest)=="function" and root then
+		for _,spawnLocation in ipairs(workspace:GetDescendants()) do
+			if spawnLocation:IsA("SpawnLocation") and spawnLocation.BrickColor==targetTeam.TeamColor and spawnLocation.AllowTeamChangeOnTouch then
+				pcall(firetouchinterest,spawnLocation,root,0)
+				Wait()
+				pcall(firetouchinterest,spawnLocation,root,1)
+				assignTeam()
+				return
+			end
+		end
+	end
+	assignTeam()
+end,true)
+
+cmd.add({"nilchar"},{"nilchar","Temporarily parent your character to nil"},function()
+	local char=getChar()
+	if not char then
+		DoNotif("Character unavailable",2)
+		return
+	end
+	char.Parent=nil
+end)
+
+cmd.add({"unnilchar","nonilchar"},{"unnilchar (nonilchar)","Move your character back to workspace"},function()
+	local char=getChar()
+	if not char then
+		DoNotif("Character unavailable",2)
+		return
+	end
+	char.Parent=workspace
+end)
 
 cmd.add({"char","character","morph"},{"char <username/userid>","change your character's appearance to someone else's"},function(arg)
 	if not arg then return end
@@ -19823,7 +25029,7 @@ cmd.add({"freegamepass", "freegp"},{"freegamepass (freegp)", "Pretends you own e
 	if success then
 		DoNotif(Format("Hooked gamepass ownership and fired %d purchase signals", totalSignals), 6, "Free Gamepasses")
 	else
-		DoNotif("Failed to spoof gamepasses: " .. tostring(err), 8, "Free Gamepasses")
+		DoNotif("Failed to spoof gamepasses: "..tostring(err), 8, "Free Gamepasses")
 	end
 end)
 
@@ -20971,6 +26177,28 @@ cmd.add({"stopanimations", "stopanims", "stopanim", "noanim"}, {"stopanimations 
 	end
 end)
 
+cmd.add({"refreshanimations", "refreshanimation", "refreshanims", "refreshanim"}, {"refreshanimations (refreshanimation,refreshanims,refreshanim)", "Reload character animations"}, function()
+	local char=getChar()
+	if not char then
+		DoNotif("Character unavailable",2)
+		return
+	end
+	local humanoid=char:FindFirstChildOfClass("Humanoid") or char:FindFirstChildOfClass("AnimationController")
+	local animate=char:FindFirstChild("Animate")
+	if not humanoid or not animate then
+		DoNotif("Failed to locate Animate or Humanoid",3)
+		return
+	end
+	animate.Disabled=true
+	pcall(function()
+		for _,track in ipairs(humanoid:GetPlayingAnimationTracks()) do
+			track:Stop()
+		end
+	end)
+	animate.Disabled=false
+	DoNotif("Animations refreshed",2)
+end)
+
 loopwave = false
 
 cmd.add({"loopwaveat", "loopwat"}, {"loopwaveat <player> (loopwat)", "Wave to a player in a loop"}, function(...)
@@ -21949,7 +27177,8 @@ cmd.add({"backpack"},{"backpack","provides a custom backpack gui"},function()
 	loadstring(game:HttpGet("https://raw.githubusercontent.com/ltseverydayyou/uuuuuuu/refs/heads/main/mobileBACKPACK.lua"))();
 end)
 
-cmd.add({"reserveserver","privateserver","ps","rs"},{"reserveserver [code]","Teleports to a reserved server or creates one if code is missing"},function(code)
+-- patched
+--[[cmd.add({"reserveserver","privateserver","ps","rs"},{"reserveserver [code]","Teleports to a reserved server or creates one if code is missing"},function(code)
 	local md5={}
 	local hmac={}
 	local base64={}
@@ -22175,9 +27404,261 @@ cmd.add({"reserveserver","privateserver","ps","rs"},{"reserveserver [code]","Tel
 	end
 	buttons[#buttons+1]={Text="Cancel",Callback=function() DoNotif("Cancelled reserved server request") end}
 	Popup({Title="Select Place",Description=providedRaw and "Choose the place for the reserved server code." or "Choose a place to create a reserved server.",Buttons=buttons})
-end)
+end)]]
 
 HumanModCons = {}
+
+ToolLoopCons = {}
+
+originalIO.stopEquipToolLoop=function(silent)
+	if ToolLoopCons.loop then
+		ToolLoopCons.loop:Disconnect()
+		ToolLoopCons.loop = nil
+	end
+
+	if not silent then
+		if ToolLoopCons.display then
+			DoNotif(Format("Loop equip disabled for \"%s\".", ToolLoopCons.display), 2)
+		else
+			DoNotif("Loop equip disabled.", 2)
+		end
+	end
+
+	ToolLoopCons.filter = nil
+	ToolLoopCons.display = nil
+	ToolLoopCons.warned = nil
+end
+
+originalIO.gatherPlayerTools=function()
+	local char = getChar()
+	local backpack = getBp()
+	local tools = {}
+
+	if not char and not backpack then
+		return char, backpack, tools
+	end
+
+	local seen = {}
+	local function considerTool(tool)
+		if typeof(tool) == "Instance" and tool:IsA("Tool") and not seen[tool] then
+			seen[tool] = true
+			Insert(tools, tool)
+		end
+	end
+
+	if backpack then
+		for _, item in ipairs(backpack:GetChildren()) do
+			considerTool(item)
+		end
+	end
+
+	if char then
+		for _, item in ipairs(char:GetChildren()) do
+			considerTool(item)
+		end
+	end
+
+	table.sort(tools, function(a, b)
+		return Lower(a.Name) < Lower(b.Name)
+	end)
+
+	return char, backpack, tools
+end
+
+originalIO.safeToolImage=function(inst, props)
+	for _, propName in ipairs(props) do
+		local ok, value = pcall(function()
+			return inst[propName]
+		end)
+		if ok then
+			if typeof(value) == "number" then
+				value = "rbxassetid://"..value
+			end
+			if typeof(value) == "string" and value ~= "" then
+				return value
+			end
+		end
+	end
+end
+
+originalIO.findToolImage=function(tool)
+	if not tool then
+		return nil
+	end
+
+	local direct = originalIO.safeToolImage(tool, { "TextureId", "TextureID", "Texture", "Image" })
+	if direct then
+		return direct
+	end
+
+	for _, desc in ipairs(tool:GetDescendants()) do
+		local image
+		if desc:IsA("Decal") or desc:IsA("Texture") then
+			image = originalIO.safeToolImage(desc, { "Texture" })
+		elseif desc:IsA("SpecialMesh") or desc:IsA("Mesh") or desc:IsA("DataModelMesh") then
+			image = originalIO.safeToolImage(desc, { "TextureId" })
+		elseif desc:IsA("MeshPart") or desc:IsA("UnionOperation") or desc:IsA("BasePart") then
+			image = originalIO.safeToolImage(desc, { "TextureID", "TextureId" })
+		elseif desc:IsA("ImageLabel") or desc:IsA("ImageButton") then
+			image = originalIO.safeToolImage(desc, { "Image" })
+		else
+			image = originalIO.safeToolImage(desc, { "Texture", "TextureId", "TextureID", "Image" })
+		end
+		if image then
+			return image
+		end
+	end
+
+	return nil
+end
+
+originalIO.findToolByName=function(tools, query)
+	if type(query) ~= "string" or query == "" then
+		return nil
+	end
+
+	local lowerQuery = Lower(query)
+	local partial
+	for _, tool in ipairs(tools) do
+		local lowerName = Lower(tool.Name)
+		if lowerName == lowerQuery then
+			return tool
+		end
+		if not partial and lowerName:find(lowerQuery, 1, true) then
+			partial = tool
+		end
+	end
+	return partial
+end
+
+originalIO.equipToolInstance=function(toolRef)
+	if typeof(toolRef) ~= "Instance" or not toolRef:IsA("Tool") then
+		DoNotif("Tool is no longer available.", 2)
+		return false
+	end
+
+	local charNow = getChar()
+	if not charNow then
+		DoNotif("Could not find your character.", 2)
+		return false
+	end
+
+	local target = toolRef
+	if not (target and target.Parent) then
+		local currentBp = getBp()
+		if currentBp then
+			local found = currentBp:FindFirstChild(toolRef.Name)
+			if found and found:IsA("Tool") then
+				target = found
+			end
+		end
+	end
+
+	if not target or not target:IsA("Tool") then
+		DoNotif("Tool is no longer available.", 2)
+		return false
+	end
+
+	local targetRef = target
+	Defer(function()
+		local charLater = getChar()
+		if not charLater then
+			return
+		end
+
+		local toolToEquip = targetRef
+		if not (toolToEquip and toolToEquip.Parent) then
+			local laterBackpack = getBp()
+			if laterBackpack then
+				local foundLater = laterBackpack:FindFirstChild(toolRef.Name)
+				if foundLater and foundLater:IsA("Tool") then
+					toolToEquip = foundLater
+				end
+			end
+		end
+
+		if toolToEquip and toolToEquip:IsA("Tool") and toolToEquip.Parent ~= charLater then
+			toolToEquip.Parent = charLater
+		end
+	end)
+
+	return true
+end
+
+originalIO.buildToolButtons=function(tools, action)
+	local buttons = {}
+	for _, toolRef in ipairs(tools) do
+		local imageId = originalIO.findToolImage(toolRef) or ""
+		local toolName = toolRef.Name
+		buttons[#buttons + 1] = {
+			Text = toolName,
+			Image = imageId,
+			Callback = function()
+				action(toolRef)
+			end
+		}
+	end
+	buttons[#buttons + 1] = { Text = "Cancel", Callback = function() end }
+	return buttons
+end
+
+originalIO.startLoopForTool=function(toolRef)
+	if typeof(toolRef) ~= "Instance" or not toolRef:IsA("Tool") then
+		DoNotif("Select a valid tool to loop equip.", 2)
+		return
+	end
+
+	local displayName = toolRef.Name
+	local filterLower = Lower(displayName)
+
+	originalIO.stopEquipToolLoop(true)
+
+	ToolLoopCons.filter = filterLower
+	ToolLoopCons.display = displayName
+	ToolLoopCons.warned = false
+
+	originalIO.equipToolInstance(toolRef)
+
+	ToolLoopCons.loop = RunService.Stepped:Connect(function()
+		if not ToolLoopCons.filter then
+			return
+		end
+
+		local currentChar = getChar()
+		if not currentChar then
+			return
+		end
+
+		local currentBackpack = getBp()
+		if not currentBackpack then
+			return
+		end
+
+		local function findMatch(container)
+			for _, tool in ipairs(container:GetChildren()) do
+				if tool:IsA("Tool") and Lower(tool.Name):find(filterLower, 1, true) then
+					return tool
+				end
+			end
+		end
+
+		if findMatch(currentChar) then
+			ToolLoopCons.warned = false
+			return
+		end
+
+		local match = findMatch(currentBackpack)
+		if match then
+			ToolLoopCons.warned = false
+			originalIO.equipToolInstance(match)
+		elseif not ToolLoopCons.warned then
+			DoNotif(Format("Loop equip: \"%s\" not found.", ToolLoopCons.display), 2)
+			ToolLoopCons.warned = true
+		end
+	end)
+
+	DoNotif(Format("Loop equip enabled for \"%s\". Use unloopequiptool to stop.", displayName), 3)
+end
 
 cmd.add({"edgejump", "ejump"}, {"edgejump (ejump)", "Automatically jumps when you get to the edge of an object"}, function()
 	local Char = speaker.Character
@@ -22232,6 +27713,92 @@ cmd.add({"unequiptools"},{"unequiptools","Unequips every tool you are currently 
 	if getChar() then
 		getChar():FindFirstChildOfClass('Humanoid'):UnequipTools()
 	end
+end)
+
+cmd.add({"equiptool","etool"},{"equiptool (etool)","Equip a specific tool by name or selection"},function(...)
+	local char, backpack, tools = originalIO.gatherPlayerTools()
+	if not char or not backpack then
+		DoNotif("Could not find your character or backpack.", 2)
+		return
+	end
+
+	if #tools == 0 then
+		DoNotif("You do not have any tools to equip.", 2)
+		return
+	end
+
+	local rawInput = Concat({...}, " ")
+	rawInput = (type(rawInput) == "string") and rawInput:gsub("^%s+", ""):gsub("%s+$", "") or ""
+
+	if rawInput ~= "" then
+		local match = originalIO.findToolByName(tools, rawInput)
+		if match then
+			originalIO.equipToolInstance(match)
+		else
+			DoNotif(Format("No tools matching '%s' found.", rawInput), 2)
+		end
+		return
+	end
+
+	if type(Popup) ~= "function" then
+		DoNotif("Popup UI is unavailable in this session. Provide a tool name instead.", 3)
+		return
+	end
+
+	local buttons = originalIO.buildToolButtons(tools, function(toolRef)
+		originalIO.equipToolInstance(toolRef)
+	end)
+
+	Popup({
+		Title = "Equip Tool",
+		Description = "Select a tool to equip.",
+		Buttons = buttons
+	})
+end)
+
+cmd.add({"loopequiptool","lequiptool","loopet"},{"loopequiptool <tool name>","Keeps a specific tool equipped until disabled"},function(...)
+	local char, backpack, tools = originalIO.gatherPlayerTools()
+	if not char or not backpack then
+		DoNotif("Could not find your character or backpack.", 2)
+		return
+	end
+
+	if #tools == 0 then
+		DoNotif("You do not have any tools to loop equip.", 2)
+		return
+	end
+
+	local rawInput = Concat({...}, " ")
+	rawInput = (type(rawInput) == "string") and rawInput:gsub("^%s+", ""):gsub("%s+$", "") or ""
+
+	if rawInput ~= "" then
+		local match = originalIO.findToolByName(tools, rawInput)
+		if match then
+			originalIO.startLoopForTool(match)
+		else
+			DoNotif(Format("No tools matching '%s' found.", rawInput), 2)
+		end
+		return
+	end
+
+	if type(Popup) ~= "function" then
+		DoNotif("Popup UI is unavailable in this session. Provide a tool name instead.", 3)
+		return
+	end
+
+	local buttons = originalIO.buildToolButtons(tools, function(toolRef)
+		originalIO.startLoopForTool(toolRef)
+	end)
+
+	Popup({
+		Title = "Loop Equip Tool",
+		Description = "Select a tool to keep equipped.",
+		Buttons = buttons
+	})
+end)
+
+cmd.add({"unloopequiptool","unloopet","unlequiptool"},{"unloopequiptool","Stops the loop equip behaviour"},function()
+	originalIO.stopEquipToolLoop()
 end)
 
 bangLoop = nil
@@ -23451,16 +29018,11 @@ cmd.add({"hydroxide","hydro"},{"hydroxide (hydro)","executes hydroxide"},functio
 end)
 
 cmd.add({"remotespy","simplespy","rspy"},{"remotespy (simplespy,rspy)","executes simplespy that supports both pc and mobile"},function()
-	loadstring(game:HttpGet("https://raw.githubusercontent.com/ltseverydayyou/uuuuuuu/main/simplee%20spyyy%20mobilee"))()
+	loadstring(game:HttpGet("https://gist.githubusercontent.com/ltseverydayyou/2398adb0db70abc4f752219a676f6cb2/raw/SimpleSpyRework.luau"))()
 end)
 
 cmd.add({"turtlespy","tspy"},{"turtlespy (tspy)","executes Turtle Spy that supports both pc and mobile"},function()
 	loadstring(game:HttpGet("https://raw.githubusercontent.com/ltseverydayyou/uuuuuuu/main/Turtle%20Spy.lua"))()
-end)
-
--- running this twice may lead to a crash (this shit is a bit broken idfk why)
-cmd.add({"sigmaspy", "sspy","superspy"},{"sigmaspy","the strongest RemoteSpy able to detect (RemoteEvent/Function - BindableEvent/Function - OnClientEvent/OnClientInvoke) and can detect remotes that were fired from Actors"},function()
-	loadstring(game:HttpGet("https://raw.githubusercontent.com/depthso/Sigma-Spy/refs/heads/main/Main.lua"))()
 end)
 
 cmd.add({"gravity","grav"},{"gravity <amount> (grav)","sets game gravity to whatever u want"},function(...)
@@ -24212,6 +29774,27 @@ cmd.add({"r15"},{"r15","Shows a prompt that will switch your character rig type 
 	SafeGetService("AvatarEditorService").PromptSaveAvatarCompleted:Wait()
 	getHum():ChangeState(Enum.HumanoidStateType.Dead)
 	getHum().Health=0
+end)
+
+cmd.add({"breakvelocity"},{"breakvelocity","Sets your character's velocity to zero momentarily"},function()
+	local char=getChar()
+	if not char then
+		DoNotif("Character unavailable",2)
+		return
+	end
+	local zero=Vector3.zero
+	local stopAt=time()+1
+	repeat
+		for _,part in ipairs(char:GetDescendants()) do
+			if part:IsA("BasePart") then
+				NAlib.setProperty(part,"AssemblyLinearVelocity",zero)
+				NAlib.setProperty(part,"AssemblyAngularVelocity",zero)
+				NAlib.setProperty(part,"Velocity",zero)
+				NAlib.setProperty(part,"RotVelocity",zero)
+			end
+		end
+		Wait()
+	until time()>=stopAt or not char.Parent
 end)
 
 cmd.add({"maxslopeangle", "msa"}, {"maxslopeangle (msa)", "Changes your character's MaxSlopeAngle"}, function(...)
@@ -25142,6 +30725,777 @@ end, true)
 
 local activeTeleports = {}
 
+originalIO.gotoNext = originalIO.gotoNext or {}
+
+do
+	local gotoNext = originalIO.gotoNext
+	local state = gotoNext.state or {
+		teleporting = false,
+		totalDuplicates = 0,
+		duplicatesSessionOrder = {},
+		tracerPart = nil,
+		tracerConnection = nil,
+		tracerHue = 0,
+	}
+	gotoNext.state = state
+
+	function gotoNext.trim(str)
+		if type(str) ~= "string" then
+			return str
+		end
+		local trimmed = str:match("^%s*(.-)%s*$")
+		return trimmed or str
+	end
+
+	function gotoNext.tokenizeArgs(rawArgs)
+		local tokens = {}
+		if not rawArgs or #rawArgs == 0 then
+			return tokens
+		end
+
+		local combined = Concat(rawArgs, " ")
+		if combined == "" then
+			return tokens
+		end
+
+		local length = #combined
+		local index = 1
+
+		while index <= length do
+			while index <= length and combined:sub(index, index):match("%s") do
+				index = index + 1
+			end
+			if index > length then
+				break
+			end
+
+			local ch = combined:sub(index, index)
+			if ch == '"' or ch == "'" then
+				local quote = ch
+				index = index + 1
+				local buffer = {}
+
+				while index <= length do
+					local current = combined:sub(index, index)
+					if current == quote then
+						index = index + 1
+						break
+					end
+					buffer[#buffer + 1] = current
+					index = index + 1
+				end
+
+				tokens[#tokens + 1] = Concat(buffer)
+			else
+				local start = index
+				while index <= length and not combined:sub(index, index):match("%s") do
+					index = index + 1
+				end
+				tokens[#tokens + 1] = combined:sub(start, index - 1)
+			end
+		end
+
+		if #tokens == 0 then
+			for _, value in ipairs(rawArgs) do
+				if type(value) == "string" and value ~= "" then
+					tokens[#tokens + 1] = value
+				end
+			end
+		end
+
+		for i = 1, #tokens do
+			tokens[i] = gotoNext.trim(tokens[i])
+		end
+
+		return tokens
+	end
+
+	function gotoNext.buildSearchNames(rawPrefix, normalizedPrefix, index)
+		local variants = {}
+		local seen = {}
+		local function add(name)
+			if not name or name == "" then
+				return
+			end
+			local canonical = name:lower()
+			if not seen[canonical] then
+				variants[#variants + 1] = name
+				seen[canonical] = true
+			end
+		end
+
+		local idx = tostring(index)
+		add(idx)
+
+		local normalized = normalizedPrefix and gotoNext.trim(normalizedPrefix) or nil
+		if normalized and normalized ~= "" then
+			add(normalized.." "..idx)
+			add(normalized..idx)
+		end
+
+		if rawPrefix and rawPrefix ~= "" then
+			if not rawPrefix:match("%s$") then
+				add(rawPrefix.." "..idx)
+			end
+			add(rawPrefix..idx)
+		end
+
+		return variants
+	end
+
+	function gotoNext.extractIndexedToken(token)
+		if type(token) ~= "string" then
+			return nil
+		end
+
+		if token == "" then
+			return nil
+		end
+
+		local head, digits = token:match("^(.-)(%-?%d+)%s*$")
+		if not digits then
+			return nil
+		end
+
+		local rawPrefix = head
+		local normalized = gotoNext.trim(rawPrefix or "")
+		if normalized == "" then
+			normalized = nil
+			rawPrefix = nil
+		end
+
+		return {
+			raw = rawPrefix,
+			normalized = normalized,
+			number = tonumber(digits),
+		}
+	end
+
+	function gotoNext.sessionKey(objectType, normalizedLower, index)
+		local keyPrefix = gotoNext.trim(normalizedLower or "")
+		if keyPrefix ~= "" then
+			keyPrefix = keyPrefix:lower()
+		end
+		return (objectType or "Part").."|"..keyPrefix.."|"..tostring(index)
+	end
+
+	function gotoNext.notify(message, duration)
+		DoNotif(message, duration or 3, "GotoNext")
+	end
+
+	function gotoNext.clearTracer()
+		if state.tracerConnection then
+			state.tracerConnection:Disconnect()
+			state.tracerConnection = nil
+		end
+
+		if state.tracerPart and state.tracerPart.Parent then
+			state.tracerPart:Destroy()
+		end
+
+		state.tracerPart = nil
+	end
+
+	function gotoNext.setTracer(nextCFrame)
+		gotoNext.clearTracer()
+		if not nextCFrame then
+			return
+		end
+
+		local tracer = InstanceNew("Part", workspace)
+		tracer.Name = "NA_GotoNextTracer"
+		tracer.Anchored = true
+		tracer.CanCollide = false
+		tracer.Material = Enum.Material.Neon
+		tracer.Size = Vector3.new(2, 2, 2)
+		tracer.CFrame = nextCFrame + Vector3.new(0, 3, 0)
+		tracer.TopSurface = Enum.SurfaceType.Smooth
+		tracer.BottomSurface = Enum.SurfaceType.Smooth
+
+		state.tracerPart = tracer
+		state.tracerHue = 0
+		state.tracerConnection = RunService.Heartbeat:Connect(function(dt)
+			if not state.tracerPart or not state.tracerPart.Parent then
+				gotoNext.clearTracer()
+				return
+			end
+
+			state.tracerHue = (state.tracerHue + dt * 0.5) % 1
+			state.tracerPart.Color = Color3.fromHSV(state.tracerHue, 1, 1)
+		end)
+	end
+
+	function gotoNext.fullPath(inst)
+		if not inst then
+			return "Unknown"
+		end
+
+		local segments = {inst.Name}
+		local parent = inst.Parent
+		while parent do
+			Insert(segments, 1, parent.Name)
+			parent = parent.Parent
+		end
+
+		return Concat(segments, ".")
+	end
+
+	function gotoNext.findMatches(objectType, targetName)
+		local matches = {}
+		if not targetName or targetName == "" then
+			return matches
+		end
+
+		local targetLower = targetName:lower()
+
+		local queue = {workspace}
+		local index = 1
+
+		while queue[index] do
+			local current = queue[index]
+			index += 1
+
+			for _, child in ipairs(current:GetChildren()) do
+				local isValid = false
+				if objectType == "Part" then
+					isValid = child:IsA("BasePart")
+				elseif objectType == "Model" then
+					isValid = child:IsA("Model")
+				elseif objectType == "Folder" then
+					isValid = child:IsA("Folder")
+				end
+
+				if isValid and child.Name and child.Name:lower() == targetLower then
+					Insert(matches, {inst = child, parent = child.Parent})
+				end
+
+				queue[#queue + 1] = child
+			end
+		end
+
+		return matches
+	end
+
+	function gotoNext.resolveCFrame(inst)
+		if not inst then
+			return nil
+		end
+
+		if inst:IsA("BasePart") then
+			return inst.CFrame
+		elseif inst:IsA("Model") then
+			local ok, pivot = pcall(function()
+				return inst:GetPivot()
+			end)
+			if ok then
+				return pivot
+			end
+
+			local primary = inst.PrimaryPart or inst:FindFirstChildWhichIsA("BasePart")
+			if primary then
+				return primary.CFrame
+			end
+		end
+
+		return nil
+	end
+
+	function gotoNext.teleportToInstance(inst)
+		local char = getChar()
+		if not char then
+			return false
+		end
+
+		local targetCFrame = gotoNext.resolveCFrame(inst)
+		if not targetCFrame then
+			return false
+		end
+
+		local hum = getHum(char)
+		if hum then
+			hum.Sit = false
+		end
+
+		pcall(function()
+			char:PivotTo(targetCFrame + Vector3.new(0, 4, 0))
+		end)
+
+		return true
+	end
+
+	function gotoNext.collectFolderParts(folder)
+		local parts = {}
+		for _, descendant in ipairs(folder:GetDescendants()) do
+			if descendant:IsA("BasePart") then
+				Insert(parts, descendant)
+			end
+		end
+
+		table.sort(parts, function(a, b)
+			return a:GetFullName() < b:GetFullName()
+		end)
+
+		return parts
+	end
+
+	function gotoNext.normalizeSelection(selection)
+		local normalized = {}
+		for _, inst in ipairs(selection or {}) do
+			if inst and inst.Parent then
+				Insert(normalized, {inst = inst, parent = inst.Parent})
+			end
+		end
+		return normalized
+	end
+
+	function gotoNext.promptDuplicates(name, duplicates)
+		local selectionEvent = InstanceNew("BindableEvent")
+		local selected
+		local resolved = false
+		local window
+
+		local descriptionLines = {
+			Format("Found %d duplicates for '%s'. Choose a starting instance or TP all.", #duplicates, name)
+		}
+
+		for idx, info in ipairs(duplicates) do
+			Insert(descriptionLines, Format("%d) %s", idx, gotoNext.fullPath(info.inst)))
+		end
+
+		local buttons = {}
+
+		local function finalize(choice)
+			if resolved then
+				return
+			end
+
+			selected = choice
+			resolved = true
+			if window and window.Parent then
+				window:Destroy()
+			end
+			selectionEvent:Fire()
+		end
+
+		for idx, info in ipairs(duplicates) do
+			Insert(buttons, {
+				Text = Format("Start #%d", idx),
+				Callback = function()
+					finalize({info.inst})
+				end
+			})
+		end
+
+		Insert(buttons, {
+			Text = Format("TP All (%d)", #duplicates),
+			Callback = function()
+				local all = {}
+				for _, entry in ipairs(duplicates) do
+					Insert(all, entry.inst)
+				end
+				finalize(all)
+			end
+		})
+
+		Insert(buttons, {
+			Text = "Cancel",
+			Callback = function()
+				finalize(nil)
+			end
+		})
+
+		window = Window({
+			Title = "GotoNext",
+			Description = Concat(descriptionLines, "\n"),
+			Buttons = buttons
+		})
+
+		if window then
+			window.AncestryChanged:Connect(function(_, parent)
+				if not parent and not resolved then
+					resolved = true
+					selected = nil
+					selectionEvent:Fire()
+				end
+			end)
+		end
+
+		selectionEvent.Event:Wait()
+		selectionEvent:Destroy()
+
+		return selected
+	end
+
+	function gotoNext.parseArgs(rawArgs)
+		local tokens = gotoNext.tokenizeArgs(rawArgs)
+		local args = {}
+		for _, value in ipairs(tokens) do
+			if type(value) == "string" and value ~= "" then
+				Insert(args, value)
+			end
+		end
+
+		local first = args[1]
+		if not first then
+			return nil, "Usage:\n- gotopartnext <start> [end] [delay]\n- gotopartnext <prefix> <start> [end] [delay]"
+		end
+
+		local prefixRaw
+		local prefixNormalized
+		local startNum
+		local endNum
+		local delay
+
+		local function applyPrefix(rawCandidate, normalizedCandidate)
+			if rawCandidate and rawCandidate ~= "" then
+				if not prefixRaw then
+					prefixRaw = rawCandidate
+				end
+			end
+
+			if normalizedCandidate and normalizedCandidate ~= "" then
+				normalizedCandidate = gotoNext.trim(normalizedCandidate)
+				if normalizedCandidate == "" then
+					normalizedCandidate = nil
+				end
+			else
+				normalizedCandidate = nil
+			end
+
+			if normalizedCandidate then
+				if prefixNormalized and prefixNormalized ~= normalizedCandidate then
+					return false
+				end
+				prefixNormalized = prefixNormalized or normalizedCandidate
+			end
+
+			if not prefixRaw and prefixNormalized then
+				prefixRaw = prefixNormalized
+			end
+
+			return true
+		end
+
+		local second = args[2]
+		local third = args[3]
+		local fourth = args[4]
+
+		local firstNumeric = tonumber(first)
+		local firstInfo = gotoNext.extractIndexedToken(first)
+		local secondNumeric = tonumber(second)
+		local secondInfo = gotoNext.extractIndexedToken(second)
+		local thirdNumeric = tonumber(third)
+		local thirdInfo = gotoNext.extractIndexedToken(third)
+
+		if firstNumeric then
+			startNum = math.floor(firstNumeric)
+			if secondNumeric then
+				endNum = math.floor(secondNumeric)
+				delay = tonumber(third)
+			elseif secondInfo and secondInfo.number then
+				if not applyPrefix(secondInfo.raw, secondInfo.normalized) then
+					return nil, "Start/end names use different prefixes."
+				end
+				endNum = math.floor(secondInfo.number)
+				delay = tonumber(third)
+			else
+				endNum = startNum
+				delay = tonumber(second)
+			end
+		elseif firstInfo and firstInfo.number then
+			if not applyPrefix(firstInfo.raw, firstInfo.normalized) then
+				return nil, "Start/end names use different prefixes."
+			end
+			startNum = math.floor(firstInfo.number)
+
+			if secondNumeric then
+				endNum = math.floor(secondNumeric)
+				delay = tonumber(third)
+			elseif secondInfo and secondInfo.number then
+				if not applyPrefix(secondInfo.raw, secondInfo.normalized) then
+					return nil, "Start/end names use different prefixes."
+				end
+				endNum = math.floor(secondInfo.number)
+				delay = tonumber(third)
+			else
+				endNum = startNum
+				delay = tonumber(second)
+			end
+		else
+			if not applyPrefix(first, first) then
+				return nil, "Invalid prefix value."
+			end
+
+			if not second then
+				return nil, "Start number missing. Example: gotopartnext checkpoint 1 5"
+			end
+
+			if secondNumeric then
+				startNum = math.floor(secondNumeric)
+				if thirdNumeric then
+					endNum = math.floor(thirdNumeric)
+					delay = tonumber(fourth)
+				elseif thirdInfo and thirdInfo.number then
+					if not applyPrefix(thirdInfo.raw, thirdInfo.normalized) then
+						return nil, "Start/end names use different prefixes."
+					end
+					endNum = math.floor(thirdInfo.number)
+					delay = tonumber(fourth)
+				else
+					endNum = startNum
+					delay = tonumber(third)
+				end
+			elseif secondInfo and secondInfo.number then
+				if not applyPrefix(secondInfo.raw, secondInfo.normalized) then
+					return nil, "Start/end names use different prefixes."
+				end
+				startNum = math.floor(secondInfo.number)
+				if thirdNumeric then
+					endNum = math.floor(thirdNumeric)
+					delay = tonumber(fourth)
+				elseif thirdInfo and thirdInfo.number then
+					if not applyPrefix(thirdInfo.raw, thirdInfo.normalized) then
+						return nil, "Start/end names use different prefixes."
+					end
+					endNum = math.floor(thirdInfo.number)
+					delay = tonumber(fourth)
+				else
+					endNum = startNum
+					delay = tonumber(third)
+				end
+			else
+				return nil, "Start number missing. Example: gotopartnext checkpoint 1 10 0.5"
+			end
+		end
+
+		if not startNum then
+			return nil, "Start number missing. Example: gotopartnext checkpoint 1 10 0.5"
+		end
+
+		endNum = endNum or startNum
+
+		delay = tonumber(delay) or 0.5
+		if delay < 0 then
+			delay = 0
+		end
+
+		local prefixRawOriginal = prefixRaw
+		if prefixRawOriginal then
+			local trimmedCandidate = gotoNext.trim(prefixRawOriginal)
+			if trimmedCandidate == "" then
+				prefixRawOriginal = nil
+			end
+		end
+
+		if prefixNormalized then
+			prefixNormalized = gotoNext.trim(prefixNormalized)
+			if prefixNormalized == "" then
+				prefixNormalized = nil
+			end
+		end
+
+		if not prefixNormalized and prefixRawOriginal then
+			local trimmedRaw = gotoNext.trim(prefixRawOriginal)
+			if trimmedRaw ~= "" then
+				prefixNormalized = trimmedRaw
+			end
+		end
+
+		local prefixDisplay = nil
+		if prefixRawOriginal then
+			prefixDisplay = gotoNext.trim(prefixRawOriginal)
+			if prefixDisplay == "" then
+				prefixDisplay = nil
+			end
+		end
+		if not prefixDisplay then
+			prefixDisplay = prefixNormalized
+		end
+
+		local prefixLower = prefixNormalized and prefixNormalized:lower() or nil
+
+		return {
+			prefixRaw = prefixRawOriginal,
+			prefixNormalized = prefixNormalized,
+			prefixLower = prefixLower,
+			prefixDisplay = prefixDisplay,
+			startNum = startNum,
+			endNum = endNum,
+			delay = delay,
+		}
+	end
+
+	function gotoNext.handleSequence(objectType, rawArgs)
+		if state.teleporting then
+			gotoNext.notify("Sequence already running.", 2)
+			return
+		end
+
+		local parsed, err = gotoNext.parseArgs(rawArgs)
+		if not parsed then
+			gotoNext.notify(err or "Invalid arguments.", 4)
+			return
+		end
+
+		state.teleporting = true
+		state.totalDuplicates = 0
+
+		local prefixLabel = parsed.prefixDisplay
+		local descriptor
+		if prefixLabel and prefixLabel ~= "" then
+			descriptor = Format("Teleporting %s '%s' %d -> %d (delay %.2fs)", objectType, prefixLabel, parsed.startNum, parsed.endNum, parsed.delay)
+		else
+			descriptor = Format("Teleporting %s %d -> %d (delay %.2fs)", objectType, parsed.startNum, parsed.endNum, parsed.delay)
+		end
+		gotoNext.notify(descriptor, 3)
+
+		SpawnCall(function()
+			local step = parsed.startNum <= parsed.endNum and 1 or -1
+
+			for index = parsed.startNum, parsed.endNum, step do
+				if not state.teleporting then
+					break
+				end
+
+				local searchNames = gotoNext.buildSearchNames(parsed.prefixRaw, parsed.prefixNormalized, index)
+				if #searchNames == 0 then
+					searchNames = {tostring(index)}
+				end
+				local indexString = tostring(index)
+				local displayName = searchNames[1]
+				for _, candidateName in ipairs(searchNames) do
+					if candidateName:find(" "..indexString, 1, true) then
+						displayName = candidateName
+						break
+					end
+				end
+				if parsed.prefixDisplay and parsed.prefixDisplay ~= "" then
+					local prefixLowerForDisplay = parsed.prefixDisplay:lower()
+					for _, candidateName in ipairs(searchNames) do
+						local candidateLower = candidateName:lower()
+						if candidateLower:find(prefixLowerForDisplay, 1, true) then
+							displayName = candidateName
+							if candidateName:find(" "..indexString, 1, true) then
+								break
+							end
+						end
+					end
+				end
+				local sessionKey = gotoNext.sessionKey(objectType, parsed.prefixLower, index)
+
+				local candidates = {}
+				local seen = {}
+
+				for _, name in ipairs(searchNames) do
+					local found = gotoNext.findMatches(objectType, name)
+					for _, info in ipairs(found) do
+						local inst = info.inst
+						if inst and not seen[inst] then
+							seen[inst] = true
+							Insert(candidates, info)
+						end
+					end
+				end
+
+				if #candidates == 0 then
+					gotoNext.notify(Format("No %s named '%s'.", objectType, displayName), 2)
+				else
+					if #candidates > 1 then
+						local sessionChoice = state.duplicatesSessionOrder[sessionKey]
+
+						if sessionChoice then
+							sessionChoice = gotoNext.normalizeSelection(sessionChoice)
+							if #sessionChoice == 0 then
+								state.duplicatesSessionOrder[sessionKey] = nil
+								sessionChoice = nil
+							end
+						end
+
+						if not sessionChoice then
+							local selection = gotoNext.promptDuplicates(displayName, candidates)
+							if not selection or #selection == 0 then
+								gotoNext.notify("Sequence canceled.", 2)
+								state.teleporting = false
+								gotoNext.clearTracer()
+								return
+							end
+							state.duplicatesSessionOrder[sessionKey] = selection
+							sessionChoice = gotoNext.normalizeSelection(selection)
+						end
+
+						state.totalDuplicates = state.totalDuplicates + math.max(0, #sessionChoice - 1)
+						candidates = sessionChoice
+					end
+
+					for idx, info in ipairs(candidates) do
+						if not state.teleporting then
+							break
+						end
+
+						local inst = info.inst
+						if objectType == "Folder" then
+							local parts = gotoNext.collectFolderParts(inst)
+							for partIndex, part in ipairs(parts) do
+								if not state.teleporting then
+									break
+								end
+								local nextPart = parts[partIndex + 1]
+								gotoNext.setTracer(nextPart and nextPart.CFrame or nil)
+								gotoNext.teleportToInstance(part)
+								Wait(parsed.delay)
+							end
+						else
+							local nextInfo = candidates[idx + 1]
+							local nextTarget = nextInfo and gotoNext.resolveCFrame(nextInfo.inst) or nil
+							gotoNext.setTracer(nextTarget)
+							gotoNext.teleportToInstance(inst)
+							Wait(parsed.delay)
+						end
+					end
+				end
+			end
+
+			gotoNext.clearTracer()
+			if state.teleporting then
+				gotoNext.notify(Format("Finished teleporting! Duplicates: %d", state.totalDuplicates), 4)
+			else
+				gotoNext.notify("Sequence stopped.", 2)
+			end
+
+			state.teleporting = false
+		end)
+	end
+
+	function gotoNext.cancelSequence()
+		state.totalDuplicates = 0
+		state.duplicatesSessionOrder = {}
+		if state.teleporting then
+			state.teleporting = false
+			gotoNext.clearTracer()
+			gotoNext.notify("Teleport sequence stopped!", 3)
+		else
+			gotoNext.clearTracer()
+			gotoNext.notify("No teleport in progress.", 2)
+		end
+	end
+end
+
+cmd.add({"gotopartnext", "gpn"}, {"gotopartnext [prefix] <start> [end] [delay] (gpn)", "Teleport sequentially to parts with optional prefix and duplicate handling."}, function(...)
+	originalIO.gotoNext.handleSequence("Part", {...})
+end, true)
+
+cmd.add({"gotomodelnext", "gmn"}, {"gotomodelnext [prefix] <start> [end] [delay] (gmn)", "Teleport sequentially to models with optional prefix and duplicate handling."}, function(...)
+	originalIO.gotoNext.handleSequence("Model", {...})
+end, true)
+
+cmd.add({"gotofoldernext", "gfn"}, {"gotofoldernext [prefix] <start> [end] [delay] (gfn)", "Teleport sequentially through folder contents with optional prefix."}, function(...)
+	originalIO.gotoNext.handleSequence("Folder", {...})
+end, true)
+
+cmd.add({"gotobreak", "gb"}, {"gotobreak (gb)", "Stop the active goto sequence and clear duplicate selections."}, function()
+	originalIO.gotoNext.cancelSequence()
+end)
+
 cmd.add({"gotopart", "topart", "toprt"}, {"gotopart {partname}", "Teleports you to each matching part by name once"}, function(...)
 	local partName = Concat({...}, " "):lower()
 	local commandKey = "gotopart"
@@ -25283,6 +31637,24 @@ cmd.add({"bringpart", "bpart", "bprt"}, {"bringpart {partname} (bpart, bprt)", "
 	end
 end, true)
 
+cmd.add({"bringpartfind","bpartfind","bprtfind"},{"bringpartfind {name} (bpartfind, bprtfind)","Brings all parts containing name to your character"},function(...)
+	local name = Concat({...}," "):lower()
+	if name == "" then return end
+
+	local char = getChar()
+	if not char then return end
+	local pivot = char:GetPivot()
+
+	for _, part in ipairs(workspace:GetDescendants()) do
+		if part:IsA("BasePart") then
+			local n = part.Name:lower()
+			if Find(n, name, 1, true) ~= nil then
+				part:PivotTo(pivot)
+			end
+		end
+	end
+end,true)
+
 cmd.add({"bringmodel", "bmodel"}, {"bringmodel {modelname} (bmodel)", "Brings a model to your character by name"}, function(...)
 	local modelName = Concat({...}, " "):lower()
 
@@ -25294,6 +31666,24 @@ cmd.add({"bringmodel", "bmodel"}, {"bringmodel {modelname} (bmodel)", "Brings a 
 		end
 	end
 end, true)
+
+cmd.add({"bringmodelfind","bmodelfind"},{"bringmodelfind {name} (bmodelfind)","Brings all models whose name contains the given text to your character"},function(...)
+	local name = Concat({...}," "):lower()
+	if name == "" then return end
+
+	local char = getChar()
+	if not char then return end
+	local pivot = char:GetPivot()
+
+	for _, model in ipairs(workspace:GetDescendants()) do
+		if model:IsA("Model") then
+			local n = model.Name:lower()
+			if Find(n, name, 1, true) ~= nil then
+				model:PivotTo(pivot)
+			end
+		end
+	end
+end,true)
 
 cmd.add({"bringfolder","bfldr"},{"bringfolder {folderName} [partName] (bfldr)","Brings all parts in a folder or a specified part"},function(...)
 	local raw = {...}
@@ -25689,7 +32079,7 @@ NAmanage.CreateBox = function(part, color, transparency)
 	end
 	update()
 	Defer(update)
-	local key = "esp_update_" .. tostring(visual)
+	local key = "esp_update_"..tostring(visual)
 	if part:IsA("Model") then
 		NAlib.connect(key, part.DescendantAdded:Connect(update))
 		NAlib.connect(key, part.DescendantRemoving:Connect(update))
@@ -26476,36 +32866,141 @@ cmd.add({"folderesp","fesp"},{"folderesp {folderName}","Highlights all parts in 
 end,true)
 
 cmd.add({"unfolderesp","unfesp"},{"unfolderesp [folderName]","Disables folder ESP for a folder or all"},function(...)
-	local name = Lower(Concat({...}," "))
-	if not NAStuff.folderESPMembers then return end
-	if name=="" then
-		local keys = {}
-		for f,_ in pairs(NAStuff.folderESPMembers) do Insert(keys,f) end
-		for _,f in ipairs(keys) do
-			local k = NAStuff.folderESPKeys and NAStuff.folderESPKeys[f]
-			if k then NAlib.disconnect(k); NAStuff.folderESPKeys[f]=nil end
-			local list = NAStuff.folderESPMembers[f]
-			if list then
-				for _,p in ipairs(list) do NAmanage.RemoveEspFromPart(p) end
-				table.clear(list)
-				NAStuff.folderESPMembers[f]=nil
+	local members = NAStuff.folderESPMembers
+	if type(members) ~= "table" then
+		DoNotif("No folder ESP entries are active.", 2)
+		return
+	end
+
+	local keysCache = NAStuff.folderESPKeys
+
+	local function detachFolder(folder)
+		if typeof(folder) ~= "Instance" then
+			return false
+		end
+
+		local removed = false
+
+		if keysCache then
+			local conn = keysCache[folder]
+			if conn then
+				NAlib.disconnect(conn)
+				keysCache[folder] = nil
+				removed = true
 			end
 		end
-	else
-		local folder
-		for _,obj in ipairs(workspace:GetDescendants()) do
-			if obj:IsA("Folder") and Lower(obj.Name)==name then folder=obj break end
-		end
-		if not folder then return end
-		local k = NAStuff.folderESPKeys and NAStuff.folderESPKeys[folder]
-		if k then NAlib.disconnect(k); NAStuff.folderESPKeys[folder]=nil end
-		local list = NAStuff.folderESPMembers[folder]
+
+		local list = members[folder]
 		if list then
-			for _,p in ipairs(list) do NAmanage.RemoveEspFromPart(p) end
+			for _, part in ipairs(list) do
+				NAmanage.RemoveEspFromPart(part)
+			end
 			table.clear(list)
-			NAStuff.folderESPMembers[folder]=nil
+			members[folder] = nil
+			removed = true
+		end
+
+		return removed
+	end
+
+	local function collectTrackedFolders()
+		local tracked = {}
+		for folder, _ in pairs(members) do
+			if typeof(folder) == "Instance" then
+				tracked[#tracked + 1] = folder
+			else
+				members[folder] = nil
+			end
+		end
+		table.sort(tracked, function(a, b)
+			return Lower(a.Name) < Lower(b.Name)
+		end)
+		return tracked
+	end
+
+	local function removeAllFolders()
+		local tracked = collectTrackedFolders()
+		local removed = 0
+		for _, folder in ipairs(tracked) do
+			if detachFolder(folder) then
+				removed += 1
+			end
+		end
+		if removed > 0 then
+			DoNotif(Format("Stopped folder ESP for %d folder(s).", removed), 2)
+		else
+			DoNotif("No folder ESP entries were active.", 2)
 		end
 	end
+
+	local trackedFolders = collectTrackedFolders()
+
+	local rawInput = Concat({...}, " ")
+	rawInput = (type(rawInput) == "string") and rawInput:gsub("^%s+", ""):gsub("%s+$", "") or ""
+	local loweredInput = Lower(rawInput)
+
+	if loweredInput ~= "" then
+		if loweredInput == "all" or loweredInput == "*" then
+			removeAllFolders()
+			return
+		end
+
+		local picked = nil
+		for _, folder in ipairs(trackedFolders) do
+			if Lower(folder.Name) == loweredInput then
+				picked = folder
+				break
+			end
+		end
+
+		if not picked then
+			for _, folder in ipairs(trackedFolders) do
+				if Match(Lower(folder.Name), loweredInput) then
+					picked = folder
+					break
+				end
+			end
+		end
+
+		if picked and detachFolder(picked) then
+			DoNotif(Format("Stopped folder ESP for '%s'.", picked.Name), 2)
+		else
+			DoNotif(Format("No folder ESP entry matching '%s'.", rawInput ~= "" and rawInput or loweredInput), 3)
+		end
+		return
+	end
+
+	if #trackedFolders == 0 then
+		DoNotif("No folder ESP entries are active.", 2)
+		return
+	end
+
+	local buttons = {
+		{
+			Text = "All",
+			Callback = removeAllFolders
+		}
+	}
+
+	for _, folder in ipairs(trackedFolders) do
+		local folderRef = folder
+		buttons[#buttons + 1] = {
+			Text = folderRef.Name,
+			Callback = function()
+				if detachFolder(folderRef) then
+					DoNotif(Format("Stopped folder ESP for '%s'.", folderRef.Name), 2)
+				else
+					DoNotif("Folder ESP entry was not active.", 2)
+				end
+			end
+		}
+	end
+
+	Window({
+		Title = "Folder ESP",
+		Description = "Select a folder ESP entry to disable.",
+		Buttons = buttons
+	})
 end,true)
 
 cmd.add({"viewpart", "viewp", "vpart"}, {"viewpart {partName} (viewp, vpart)", "Focuses camera on a part, model, or folder"},function(...)
@@ -27632,7 +34127,146 @@ cmd.add({"unloopnight","unloopn","unln"},{"unloopnight (unloopn,unln)","No more 
 	end
 end)
 
-cmd.add({"loopnofog","lnofog","lnf","loopnf","nf"},{"loopnofog (lnofog,lnf,loopnf,nofog,nf)","See clearly forever!"},function()
+cmd.add({"loopnoeffect","lnoeffect","loopne","lne"},{"loopnoeffect","Keeps Lighting and CurrentCamera effects disabled"},function()
+	if not Lighting then return end
+	local st = NAmanage._ensureL()
+	local w = workspace
+	st.ne = st.ne or {init=false,enabled=false,cache=setmetatable({},{__mode="k"}),sticky=false}
+	local ne = st.ne
+	ne.cache = ne.cache or setmetatable({},{__mode="k"})
+	local function cacheProperty(inst,prop,value)
+		if not inst then return end
+		local saved = ne.cache[inst]
+		if not saved then
+			saved={}
+			ne.cache[inst]=saved
+		end
+		if saved[prop]==nil then
+			local v=value
+			if v==nil then v=st.safeGet(inst,prop) end
+			if v~=nil then saved[prop]=v end
+		end
+	end
+	local function disableEffect(inst)
+		if not inst or not inst.Parent then return end
+		if inst:IsA("PostEffect") then
+			local enabled=st.safeGet(inst,"Enabled")
+			if enabled~=nil then
+				cacheProperty(inst,"Enabled",enabled)
+				if enabled~=false then st.safeSet(inst,"Enabled",false) end
+			end
+		end
+		if inst:IsA("Atmosphere") then
+			local density=st.safeGet(inst,"Density")
+			if density~=nil then cacheProperty(inst,"Density",density); if density~=0 then st.safeSet(inst,"Density",0) end end
+			local haze=st.safeGet(inst,"Haze")
+			if haze~=nil then cacheProperty(inst,"Haze",haze); if haze~=0 then st.safeSet(inst,"Haze",0) end end
+			local glare=st.safeGet(inst,"Glare")
+			if glare~=nil then cacheProperty(inst,"Glare",glare); if glare~=0 then st.safeSet(inst,"Glare",0) end end
+		end
+	end
+	local function processLighting()
+		for _,inst in ipairs(Lighting:GetDescendants()) do disableEffect(inst) end
+	end
+	local function processCamera()
+		local cam = w.CurrentCamera
+		if not cam then
+			ne.lastCamera=nil
+			return
+		end
+		if ne.lastCamera~=cam then
+			ne.lastCamera=cam
+		end
+		for _,inst in ipairs(cam:GetDescendants()) do disableEffect(inst) end
+	end
+	local function attachCameraWatcher()
+		if ne.camDescConn then
+			pcall(function() ne.camDescConn:Disconnect() end)
+			ne.camDescConn=nil
+		end
+		local cam = w.CurrentCamera
+		if not cam then
+			ne.lastCamera=nil
+			return
+		end
+		ne.lastCamera = cam
+		processCamera()
+		local ok,conn=pcall(function()
+			return cam.DescendantAdded:Connect(function(child)
+				if not (st.ne and st.ne.enabled) then return end
+				if not ne.lastCamera or (child and not child:IsDescendantOf(ne.lastCamera)) then return end
+				disableEffect(child)
+			end)
+		end)
+		if ok and conn then
+			ne.camDescConn=conn
+		end
+	end
+	if not ne.init then
+		ne.init=true
+		st.hook("ne_camera_changed", function() return w:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
+				if not (st.ne and st.ne.enabled) then return end
+				attachCameraWatcher()
+			end) end)
+		st.hook("ne_loop", function() return RunService.RenderStepped:Connect(function()
+				if not (st.ne and st.ne.enabled) then return end
+				processLighting()
+				processCamera()
+			end) end)
+	end
+	ne.enabled=true
+	ne.sticky=true
+	processLighting()
+	processCamera()
+	attachCameraWatcher()
+end)
+
+cmd.add({"unloopnoeffect","unlnoeffect","unloopne","unlne"},{"unloopnoeffect","Restores Lighting and CurrentCamera effects"},function()
+	if not Lighting then return end
+	local st = getgenv()._LState
+	if not st or not st.ne then return end
+	local ne = st.ne
+	ne.sticky=false
+	ne.enabled=false
+	if ne.camDescConn then
+		pcall(function() ne.camDescConn:Disconnect() end)
+		ne.camDescConn=nil
+	end
+	for inst,saved in pairs(ne.cache or {}) do
+		if inst and inst.Parent and saved then
+			for prop,value in pairs(saved) do
+				if st.safeSet then st.safeSet(inst,prop,value) else pcall(function() inst[prop]=value end) end
+			end
+		end
+	end
+end)
+
+cmd.add({"noeffect","cleareffects","disableeffects"},{"noeffect","Disables Lighting and CurrentCamera effects"},function()
+	if not Lighting then return end
+	local st = NAmanage._ensureL()
+	local function disableEffect(inst)
+		if not inst then return end
+		if inst:IsA("PostEffect") then
+			local enabled=st.safeGet(inst,"Enabled")
+			if enabled~=nil and enabled~=false then st.safeSet(inst,"Enabled",false) end
+		end
+		if inst:IsA("Atmosphere") then
+			local density=st.safeGet(inst,"Density")
+			if density~=nil and density~=0 then st.safeSet(inst,"Density",0) end
+			local haze=st.safeGet(inst,"Haze")
+			if haze~=nil and haze~=0 then st.safeSet(inst,"Haze",0) end
+			local glare=st.safeGet(inst,"Glare")
+			if glare~=nil and glare~=0 then st.safeSet(inst,"Glare",0) end
+		end
+	end
+	for _,inst in ipairs(Lighting:GetDescendants()) do disableEffect(inst) end
+	local cam = workspace.CurrentCamera
+	if cam then
+		for _,inst in ipairs(cam:GetDescendants()) do disableEffect(inst) end
+	end
+end)
+
+cmd.add({"loopnofog","lnofog","lnf","loopnf"},{"loopnofog (lnofog,lnf,loopnf,nofog,nf)","See clearly forever!"},function()
 	if not Lighting then return end
 	local st = NAmanage._ensureL()
 	if st.disableNM then st.disableNM() end
@@ -27678,16 +34312,16 @@ cmd.add({"loopnofog","lnofog","lnf","loopnf","nf"},{"loopnofog (lnofog,lnf,loopn
 				disableEffect(inst)
 			end) end)
 		st.hook("nf_loop", function() return RunService.RenderStepped:Connect(function(dt)
-			if not (st.nf and st.nf.enabled) then return end
-			enforceNoFog()
-			scanAccumulator = scanAccumulator + dt
-			if scanAccumulator >= 0.5 then
-				scanAccumulator = 0
-				for _, inst in ipairs(Lighting:GetDescendants()) do
-					disableEffect(inst)
+				if not (st.nf and st.nf.enabled) then return end
+				enforceNoFog()
+				scanAccumulator = scanAccumulator + dt
+				if scanAccumulator >= 0.5 then
+					scanAccumulator = 0
+					for _, inst in ipairs(Lighting:GetDescendants()) do
+						disableEffect(inst)
+					end
 				end
-			end
-		end) end)
+			end) end)
 	end
 	nf.enabled = true
 	enforceNoFog()
@@ -27936,26 +34570,6 @@ end, true)
 
 cmd.add({"unloopgamma", "unlgamma", "unloopexposure", "unlexposure"},{"unloopgamma (unlgamma, unloopexposure, unlexposure)","stop gamma vision (real)"},function()
 	NAlib.disconnect("loopgamma")
-end)
-
--- totally made you mad didn't i LMAO
-
-cmd.add({"unsuspendchat", "fixchat", "rejoinchat", "restorechat"},{"unsuspendchat","allows you to use text Chat again"},function()
-	if not replicatesignal then return DoNotif("Your executor does not support 'replicatesignal'") end
-	replicatesignal(TextChatService.UpdateChatTimeout, LocalPlayer.UserId, 0, 10)
-end)
-
-cmd.add({"unsuspendvc", "fixvc", "rejoinvc", "restorevc"},{"unsuspendvc","allows you to use Voice Chat again"},function()
-	if not replicatesignal then return DoNotif("Your executor does not support 'replicatesignal'") end
-
-	replicatesignal(SafeGetService("VoiceChatService").ClientRetryJoin)
-
-	if typeof(onVoiceModerated) ~= "RBXScriptConnection" then
-		onVoiceModerated = SafeGetService("VoiceChatInternal").LocalPlayerModerated:Connect(function()
-			Wait(1)
-			replicatesignal(SafeGetService("VoiceChatService").ClientRetryJoin)
-		end)
-	end
 end)
 
 --[[cmd.add({"iy"},{"iy {command}","Executes infinite yield scripts"},function(...)
@@ -28502,52 +35116,116 @@ cmd.add({"unkeepna"}, {"unkeepna", "Stop executing "..adminName.." every time yo
 	DoNotif("QueueOnTeleport has been disabled. "..adminName.." will no longer auto-run after teleport")
 end)
 
-loopedFOV = nil
+do
+	local FOVhandler = {mem={o=nil,r=nil,u=nil,base={}}, loop=false, cam=nil}
 
-cmd.add({"fov"}, {"fov <number>", "Sets your FOV to a custom value (1–120)"}, function(num)
-	local field = math.clamp(tonumber(num) or 70, 1, 120)
-	local cam = workspace.CurrentCamera
-	TweenService:Create(cam, TweenInfo.new(0.3, Enum.EasingStyle.Sine), {FieldOfView = field}):Play()
-end, true)
+	originalIO.FOVstep=function()
+		local parent = NAmanage.guiCHECKINGAHHHHH(); if not parent then return end
+		FOVhandler.mem.o = (FOVhandler.mem.o and FOVhandler.mem.o.Parent) and FOVhandler.mem.o or InstanceNew("NumberValue", parent)
+		FOVhandler.mem.r = (FOVhandler.mem.r and FOVhandler.mem.r.Parent) and FOVhandler.mem.r or InstanceNew("Vector3Value", parent)
+		FOVhandler.mem.u = (FOVhandler.mem.u and FOVhandler.mem.u.Parent) and FOVhandler.mem.u or InstanceNew("Vector3Value", parent)
 
-cmd.add({"loopfov", "lfov"}, {"loopfov <number> (lfov)", "Loops your FOV to stay at a custom value (1–120)"}, function(num)
-	loopedFOV = math.clamp(tonumber(num) or 70, 1, 120)
+		local o = FOVhandler.mem.o.Value or 0
+		local sum = 0
+		for i=1,#FOVhandler.mem.base do
+			local v = FOVhandler.mem.base[i]
+			if not v or not v.Parent then v = InstanceNew("NumberValue", parent); FOVhandler.mem.base[i] = v end
+			sum += (v.Value or 0)
+		end
+		local target = (o ~= 0 and o) or sum
+		local cam = workspace.CurrentCamera; if not cam then return end
 
-	local function apply()
-		NAlib.disconnect("fov_loop")
-		NAlib.disconnect("fov_refresh")
+		if cam ~= FOVhandler.cam then
+			FOVhandler.cam = cam
+			NAlib.disconnect("fov_refresh")
+			NAlib.connect("fov_refresh", cam:GetPropertyChangedSignal("FieldOfView"):Connect(function()
+				if not FOVhandler.loop then return end
+				local t = (FOVhandler.mem.o and FOVhandler.mem.o.Value) or 0
+				if t > 0 then
+					local vis = math.clamp(t, 25, 120)
+					if cam.FieldOfView ~= vis then cam.FieldOfView = vis end
+				end
+			end))
+		end
 
-		local cam = workspace.CurrentCamera
-		if not cam then return end
+		if FOVhandler.loop and target > 0 then
+			local vis = math.clamp(target, 25, 120)
+			if cam.FieldOfView ~= vis then cam.FieldOfView = vis end
+		end
 
-		NAlib.connect("fov_loop", RunService.RenderStepped:Connect(function()
-			if cam.FieldOfView ~= loopedFOV then
-				cam.FieldOfView = loopedFOV
-			end
-		end))
+		if target <= 120 or target == 0 then
+			if FOVhandler.mem.r.Value.Magnitude > 0 then FOVhandler.mem.r.Value = Vector3.new() end
+			if FOVhandler.mem.u.Value.Magnitude > 0 then FOVhandler.mem.u.Value = Vector3.new() end
+			return
+		end
 
-		NAlib.connect("fov_refresh", cam:GetPropertyChangedSignal("FieldOfView"):Connect(function()
-			if cam.FieldOfView ~= loopedFOV then
-				cam.FieldOfView = loopedFOV
-			end
-		end))
+		local f = math.clamp((target - 120) * 0.005, 0, 0.9)
+		local v = Vector3.new(f,f,f)
+		if FOVhandler.mem.r.Value ~= v then FOVhandler.mem.r.Value = v end
+		if FOVhandler.mem.u.Value ~= v then FOVhandler.mem.u.Value = v end
+
+		local c = cam.CFrame
+		local p = c.Position
+		local r = c.RightVector
+		local u = c.UpVector
+		local l = -c.LookVector
+		local rs = Vector3.new(1,1,1) - FOVhandler.mem.r.Value
+		local us = Vector3.new(1,1,1) - FOVhandler.mem.u.Value
+		cam.CFrame = CFrame.fromMatrix(p, Vector3.new(r.X*rs.X, r.Y*rs.Y, r.Z*rs.Z), Vector3.new(u.X*us.X, u.Y*us.Y, u.Z*us.Z), l)
 	end
 
-	NAlib.disconnect("fov_watch")
-	NAlib.connect("fov_watch", workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
-		Wait(0.05)
-		apply()
+	pcall(function() RunService:UnbindFromRenderStep("FOV_SYS") end)
+	RunService:BindToRenderStep("FOV_SYS", Enum.RenderPriority.Camera.Value+1, originalIO.FOVstep)
+
+	NAlib.disconnect("fov_watch_cc")
+	NAlib.connect("fov_watch_cc", workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
+		FOVhandler.cam = workspace.CurrentCamera
 	end))
 
-	apply()
-end, true)
+	cmd.add({"fov"}, {"fov <number>", "Sets your FOV to a custom value (1–300)"}, function(num)
+		local t = math.clamp(tonumber(num) or 70, 1, 300)
+		local parent = NAmanage.guiCHECKINGAHHHHH(); if not parent then return end
+		if FOVhandler.loop then
+			FOVhandler.mem.o = (FOVhandler.mem.o and FOVhandler.mem.o.Parent) and FOVhandler.mem.o or InstanceNew("NumberValue", parent)
+			FOVhandler.mem.o.Value = t
+		else
+			FOVhandler.mem.base[1] = (FOVhandler.mem.base[1] and FOVhandler.mem.base[1].Parent) and FOVhandler.mem.base[1] or InstanceNew("NumberValue", parent)
+			FOVhandler.mem.base[1].Value = t
+		end
+		local cam = workspace.CurrentCamera
+		if cam then
+			local vis = math.clamp(t, 25, 120)
+			TweenService:Create(cam, TweenInfo.new(0.2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {FieldOfView = vis}):Play()
+		end
+	end, true)
 
-cmd.add({"unloopfov", "unlfov"}, {"unloopfov (unlfov)", "Stops the looped FOV"}, function()
-	NAlib.disconnect("fov_loop")
-	NAlib.disconnect("fov_refresh")
-	NAlib.disconnect("fov_watch")
-	loopedFOV = nil
-end)
+	cmd.add({"loopfov","lfov"}, {"loopfov <number> (lfov)", "Locks your FOV target (1–300)"}, function(num)
+		local t = math.clamp(tonumber(num) or 70, 1, 300)
+		local parent = NAmanage.guiCHECKINGAHHHHH(); if not parent then return end
+		FOVhandler.mem.o = (FOVhandler.mem.o and FOVhandler.mem.o.Parent) and FOVhandler.mem.o or InstanceNew("NumberValue", parent)
+		FOVhandler.mem.o.Value = t
+		FOVhandler.loop = true
+		NAlib.disconnect("fov_loop_hold")
+		NAlib.connect("fov_loop_hold", RunService.RenderStepped:Connect(function()
+			local p = NAmanage.guiCHECKINGAHHHHH()
+			if not FOVhandler.mem.o or not FOVhandler.mem.o.Parent then FOVhandler.mem.o = InstanceNew("NumberValue", p) end
+		end))
+		local cam = workspace.CurrentCamera
+		if cam then
+			local vis = math.clamp(t, 25, 120)
+			if cam.FieldOfView ~= vis then cam.FieldOfView = vis end
+		end
+	end, true)
+
+	cmd.add({"unloopfov","unlfov"}, {"unloopfov (unlfov)", "Stops FOV loop"}, function()
+		FOVhandler.loop = false
+		NAlib.disconnect("fov_loop_hold")
+		NAlib.disconnect("fov_refresh")
+		if FOVhandler.mem.o and FOVhandler.mem.o.Parent then FOVhandler.mem.o.Value = 0 end
+		if FOVhandler.mem.r and FOVhandler.mem.r.Parent then FOVhandler.mem.r.Value = Vector3.new() end
+		if FOVhandler.mem.u and FOVhandler.mem.u.Parent then FOVhandler.mem.u.Value = Vector3.new() end
+	end)
+end
 
 cmd.add({"homebrew"},{"homebrew","Executes homebrew admin"},function()
 	getgenv().CustomUI=false
@@ -29056,8 +35734,774 @@ cmd.add({"unantierror", "noantierror"}, {"unantierror", "Disables Anti Error"}, 
 	DebugNotif("Anti Error is now disabled!",2)
 end)
 
--- [[ NPC SECTION ]] --
+-- [[ Body Mods Section ]] --
+do
+	originalIO.bodyModsState = originalIO.bodyModsState or {
+		boobs = { active = false, size = 1, conn = nil, ox = 0.5, oy = -0.4, oz = nil, sy = 0, vy = 0, sz = 0, vz = 0, sx = 0, vx = 0, rx = 0, vrx = 0, ry = 0, rv = 0, yw = 0, vyw = 0, llv = Vector3.zero, hcf = nil, ccf = nil },
+		ass = { active = false, size = 1, conn = nil, ox = 0.48, oy = nil, oz = nil, sy = 0, vy = 0, sz = 0, vz = 0, sx = 0, vx = 0, rx = 0, vrx = 0, ry = 0, rv = 0, yw = 0, vyw = 0, llv = Vector3.zero, hcf = nil },
+		pp = { active = false, len = 1, animConn = nil, wS = nil, wTip = nil, sh = nil, dr = nil },
+		colorConn = nil,
+		spawnConn = nil,
+		apConn = nil
+	}
 
+	local state = originalIO.bodyModsState
+	local pinkColor = Color3.fromRGB(255, 100, 150)
+	local ringColor = Color3.fromRGB(225, 80, 120)
+
+	originalIO.bodyModsSpring = originalIO.bodyModsSpring or function(u, v, target, stiffness, damping, dt)
+		local accel = -stiffness * u - damping * v + stiffness * target
+		v = v + accel * dt
+		u = u + v * dt
+		return u, v
+	end
+
+	originalIO.bodyModsDisconnectConnection = function(conn)
+		if conn and conn.Connected then
+			conn:Disconnect()
+		end
+		return nil
+	end
+
+	originalIO.bodyModsConnectAppearanceLoaded = originalIO.bodyModsConnectAppearanceLoaded or function(object, callback)
+		if not object or type(callback) ~= 'function' then
+			return nil
+		end
+		local ok, signal = pcall(function()
+			return object.CharacterAppearanceLoaded
+		end)
+		if ok and typeof(signal) == 'RBXScriptSignal' then
+			return signal:Connect(callback)
+		end
+		Defer(callback)
+		return nil
+	end
+
+	originalIO.bodyModsGetCharacter = function(waitFor)
+		local character = LocalPlayer.Character
+		if character or not waitFor then
+			return character
+		end
+		local ok, result = pcall(function()
+			return LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+		end)
+		return ok and result or nil
+	end
+
+	originalIO.bodyModsGetHumanoid = function(waitFor)
+		local character = originalIO.bodyModsGetCharacter(waitFor)
+		if not character then
+			return nil
+		end
+		local humanoid = character:FindFirstChildOfClass('Humanoid')
+		if humanoid or not waitFor then
+			return humanoid
+		end
+		local ok, result = pcall(function()
+			return character:WaitForChild('Humanoid', 10)
+		end)
+		return ok and result or nil
+	end
+
+	originalIO.bodyModsWaitFor = function(partNames, timeout)
+		local deadline = os.clock() + (timeout or 10)
+		while os.clock() < deadline do
+			local character = LocalPlayer.Character
+			if character then
+				for _, name in ipairs(partNames) do
+					local part = character:FindFirstChild(name)
+					if part then
+						return part
+					end
+				end
+			end
+			Wait(0.05)
+		end
+		return nil
+	end
+
+	originalIO.bodyModsGetTorso = function(forBoobs)
+		local character = originalIO.bodyModsGetCharacter(true)
+		local humanoid = originalIO.bodyModsGetHumanoid(true)
+		if not character or not humanoid then
+			return nil
+		end
+		if forBoobs then
+			return character:FindFirstChild('UpperTorso')
+				or character:FindFirstChild('Torso')
+				or originalIO.bodyModsWaitFor({ 'UpperTorso', 'Torso' }, 5)
+		end
+		if humanoid.RigType == Enum.HumanoidRigType.R15 then
+			return character:FindFirstChild('LowerTorso') or originalIO.bodyModsWaitFor({ 'LowerTorso' }, 5)
+		end
+		return character:FindFirstChild('Torso') or originalIO.bodyModsWaitFor({ 'Torso' }, 5)
+	end
+
+	originalIO.bodyModsGetSkinColor = function()
+		local character = LocalPlayer.Character
+		if not character then
+			return Color3.new(1, 0.8, 0.6)
+		end
+		local part =
+			character:FindFirstChild('LeftUpperArm') or
+			character:FindFirstChild('Left Arm') or
+			character:FindFirstChild('RightUpperArm') or
+			character:FindFirstChild('Right Arm') or
+			character:FindFirstChild('LeftUpperLeg') or
+			character:FindFirstChild('Left Leg') or
+			character:FindFirstChild('UpperTorso') or
+			character:FindFirstChild('Torso')
+		return (part and part.Color) or Color3.new(1, 0.8, 0.6)
+	end
+
+	originalIO.bodyModsAnyActive = function()
+		return state.boobs.active or state.ass.active or state.pp.active
+	end
+
+	originalIO.bodyModsDisconnectColorWatcher = function()
+		state.colorConn = originalIO.bodyModsDisconnectConnection(state.colorConn)
+	end
+
+	originalIO.bodyModsEnsureColorWatcher = function()
+		if not originalIO.bodyModsAnyActive() then
+			originalIO.bodyModsDisconnectColorWatcher()
+			return
+		end
+		if state.colorConn and state.colorConn.Connected then
+			return
+		end
+		state.colorConn = RunService.Heartbeat:Connect(function()
+			if not originalIO.bodyModsAnyActive() then
+				originalIO.bodyModsDisconnectColorWatcher()
+				return
+			end
+			local character = LocalPlayer.Character
+			if not character then
+				return
+			end
+			local skin = originalIO.bodyModsGetSkinColor()
+			for _, part in ipairs(character:GetChildren()) do
+				if part:IsA('BasePart') then
+					if part.Name == 'Boob' or part.Name == 'Cheek' or part.Name == 'Balls' or (part.Name == 'penis' and part.Shape == Enum.PartType.Cylinder) then
+						if part.Color ~= skin then
+							part.Color = skin
+						end
+					elseif part.Name == 'Nipple' or (part.Name == 'penis' and part.Shape == Enum.PartType.Ball) then
+						if part.Color ~= pinkColor then
+							part.Color = pinkColor
+						end
+					elseif part.Name == 'Areola' then
+						if part.Color ~= ringColor then
+							part.Color = ringColor
+						end
+					end
+				end
+			end
+		end)
+	end
+
+	originalIO.bodyModsOnAppearanceLoaded = function()
+		Defer(function()
+			local character = LocalPlayer.Character
+			if not character then
+				return
+			end
+			local skin = originalIO.bodyModsGetSkinColor()
+			for _, part in ipairs(character:GetChildren()) do
+				if part:IsA('BasePart') then
+					if part.Name == 'Boob' or part.Name == 'Cheek' or part.Name == 'Balls' or (part.Name == 'penis' and part.Shape == Enum.PartType.Cylinder) then
+						part.Color = skin
+					end
+				end
+			end
+		end)
+	end
+
+	originalIO.bodyModsAppear = function(parts, scale, time)
+		local tweenInfo = TweenInfo.new(time or 0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+		for _, part in ipairs(parts) do
+			if part and part:IsA('BasePart') then
+				local target = part.Size
+				part.Transparency = 1
+				part.Size = target * (scale or 0.2)
+				TweenService:Create(part, tweenInfo, { Transparency = 0, Size = target }):Play()
+			end
+		end
+	end
+
+	originalIO.bodyModsApplyBoobs = function(size)
+		local character = originalIO.bodyModsGetCharacter(true)
+		local humanoid = originalIO.bodyModsGetHumanoid(true)
+		if not character or not humanoid then
+			return
+		end
+		local torso = originalIO.bodyModsGetTorso(true)
+		if not torso then
+			return
+		end
+
+		for _, part in ipairs(character:GetChildren()) do
+			if part:IsA('BasePart') and (part.Name == 'Boob' or part.Name == 'Nipple' or part.Name == 'Areola') then
+				part:Destroy()
+			end
+		end
+
+		local skin = originalIO.bodyModsGetSkinColor()
+		local baseSize = Vector3.new(1.2, 1.2, 1.2)
+		local baseNipple = Vector3.new(0.32, 0.32, 0.32)
+		local boobSize = baseSize * size
+		local nippleSize = baseNipple * size
+		local areolaSize = nippleSize * 2
+		local popForward = 0.02
+		local backGap = math.max(0.03, nippleSize.Z * 0.45)
+		local nudge = 0.02
+		local radius = boobSize.Z * 0.5
+		local torsoFront = torso.Size.Z * 0.5
+		state.boobs.oz = torsoFront + math.max(0.12, radius * 0.75) - 0.06
+
+		local function offsetToFront(sphereSize, attachSize)
+			local sphereRadius = (sphereSize and sphereSize.Z or baseSize.Z) * 0.5
+			local attachRadius = (attachSize and attachSize.Z or baseNipple.Z) * 0.5
+			local offset = sphereRadius - (attachRadius * 0.5) - 0.005
+			if offset < 0 then
+				offset = 0
+			end
+			return offset
+		end
+
+		local function createHalf(side)
+			local boob = Instance.new('Part')
+			boob.Shape = Enum.PartType.Ball
+			boob.Size = boobSize
+			boob.Color = skin
+			boob.Material = Enum.Material.SmoothPlastic
+			boob.Anchored = false
+			boob.CanCollide = false
+			boob.CanTouch = false
+			boob.CanQuery = false
+			boob.Name = 'Boob'
+			boob.Parent = character
+
+			local nipple = Instance.new('Part')
+			nipple.Shape = Enum.PartType.Ball
+			nipple.Size = nippleSize
+			nipple.Color = pinkColor
+			nipple.Material = Enum.Material.SmoothPlastic
+			nipple.Anchored = false
+			nipple.CanCollide = false
+			nipple.CanTouch = false
+			nipple.CanQuery = false
+			nipple.Name = 'Nipple'
+			nipple.Parent = boob
+
+			local areola = Instance.new('Part')
+			areola.Shape = Enum.PartType.Ball
+			areola.Size = areolaSize
+			areola.Color = ringColor
+			areola.Material = Enum.Material.SmoothPlastic
+			areola.Anchored = false
+			areola.CanCollide = false
+			areola.CanTouch = false
+			areola.CanQuery = false
+			areola.Name = 'Areola'
+			areola.Parent = boob
+
+			local nippleWeld = Instance.new('Weld')
+			nippleWeld.Part0 = nipple
+			nippleWeld.Part1 = boob
+			nippleWeld.C0 = CFrame.new(0, 0, offsetToFront(boob.Size, nipple.Size) + popForward)
+			nippleWeld.Parent = nipple
+
+			local areolaWeld = Instance.new('Weld')
+			areolaWeld.Part0 = areola
+			areolaWeld.Part1 = boob
+			areolaWeld.C0 = CFrame.new(0, 0, offsetToFront(boob.Size, areola.Size) - (backGap - nudge))
+			areolaWeld.Parent = areola
+
+			local weld = Instance.new('Weld')
+			weld.Part0 = boob
+			weld.Part1 = torso
+			weld.C0 = CFrame.new(side * state.boobs.ox, state.boobs.oy, state.boobs.oz)
+			weld.Parent = boob
+
+			return boob, nipple, areola, weld, nippleWeld, areolaWeld
+		end
+
+		local left, leftNipple, leftAreola, leftWeld, leftNippleWeld, leftAreolaWeld = createHalf(-1)
+		local right, rightNipple, rightAreola, rightWeld, rightNippleWeld, rightAreolaWeld = createHalf(1)
+
+		state.boobs.size = size
+		state.boobs.active = true
+		state.boobs.conn = originalIO.bodyModsDisconnectConnection(state.boobs.conn)
+		state.boobs.sy = state.boobs.sy or 0
+		state.boobs.vy = state.boobs.vy or 0
+		state.boobs.sz = state.boobs.sz or 0
+		state.boobs.vz = state.boobs.vz or 0
+		state.boobs.sx = state.boobs.sx or 0
+		state.boobs.vx = state.boobs.vx or 0
+		state.boobs.rx = state.boobs.rx or 0
+		state.boobs.vrx = state.boobs.vrx or 0
+		state.boobs.ry = state.boobs.ry or 0
+		state.boobs.rv = state.boobs.rv or 0
+		state.boobs.yw = state.boobs.yw or 0
+		state.boobs.vyw = state.boobs.vyw or 0
+		state.boobs.llv = state.boobs.llv or Vector3.zero
+		state.boobs.ccf = nil
+		state.boobs.hcf = nil
+
+		state.boobs.conn = RunService.RenderStepped:Connect(function(dt)
+			local currentChar = originalIO.bodyModsGetCharacter()
+			if not currentChar or not currentChar.Parent then
+				return
+			end
+			local hrp = currentChar:FindFirstChild('HumanoidRootPart')
+			if not hrp then
+				return
+			end
+			local camera = workspace.CurrentCamera
+			local velocity = hrp.AssemblyLinearVelocity or hrp.Velocity
+			local localVel = hrp.CFrame:VectorToObjectSpace(velocity)
+			local angular = hrp.AssemblyAngularVelocity or Vector3.zero
+			local localAng = hrp.CFrame:VectorToObjectSpace(angular)
+			local camAng = Vector3.zero
+			if camera and state.boobs.ccf then
+				local rel = state.boobs.ccf:toObjectSpace(camera.CFrame)
+				local x, y, z = rel:ToEulerAnglesXYZ()
+				camAng = Vector3.new(x, y, z) / math.max(dt, 1/240)
+			end
+			state.boobs.ccf = camera and camera.CFrame or nil
+			local useCam = (LocalPlayer.CameraMode == Enum.CameraMode.LockFirstPerson) or (UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter)
+			local angInput = useCam and camAng or localAng
+			local accel = (localVel - state.boobs.llv) / math.max(dt, 1/240)
+			state.boobs.llv = localVel
+
+			local targetY = math.clamp((-localVel.Y * 0.015) - accel.Y * 0.006, -0.08, 0.08)
+			local targetZ = math.clamp((-localVel.Z * 0.020) - accel.Z * 0.006, -0.10, 0.10)
+			local targetX = math.clamp((-localVel.X * 0.016), -0.08, 0.08)
+			local targetPitch = math.clamp(((-localVel.Y * 0.015) - accel.Y * 0.006) + angInput.X * 0.60, -0.38, 0.38)
+			local targetRoll = math.clamp((-localVel.X * 0.06) + (-angInput.Y * 0.70), -0.42, 0.42)
+			local targetYaw = math.clamp((localVel.X * 0.06) + (angInput.Z * 0.70), -0.42, 0.42)
+
+			local stiffness, damping = 82, 4.4
+			state.boobs.sy, state.boobs.vy = originalIO.bodyModsSpring(state.boobs.sy, state.boobs.vy, targetY, stiffness, damping, dt)
+			state.boobs.sz, state.boobs.vz = originalIO.bodyModsSpring(state.boobs.sz, state.boobs.vz, targetZ, stiffness, damping, dt)
+			state.boobs.sx, state.boobs.vx = originalIO.bodyModsSpring(state.boobs.sx, state.boobs.vx, targetX, stiffness, damping, dt)
+			state.boobs.rx, state.boobs.vrx = originalIO.bodyModsSpring(state.boobs.rx, state.boobs.vrx, targetPitch, stiffness, 4.0, dt)
+			state.boobs.ry, state.boobs.rv = originalIO.bodyModsSpring(state.boobs.ry, state.boobs.rv, targetRoll, stiffness, 4.0, dt)
+			state.boobs.yw, state.boobs.vyw = originalIO.bodyModsSpring(state.boobs.yw, state.boobs.vyw, targetYaw, stiffness, 4.0, dt)
+
+			state.boobs.sy = math.clamp(state.boobs.sy, -0.50, 0.50)
+			state.boobs.sz = math.clamp(state.boobs.sz, -0.40, 0.40)
+			state.boobs.sx = math.clamp(state.boobs.sx, -0.40, 0.40)
+			state.boobs.ry = math.clamp(state.boobs.ry, -0.42, 0.42)
+
+			local sxCap = math.clamp(state.boobs.sx, -state.boobs.ox * 0.35, state.boobs.ox * 0.35)
+			local forwardZ = state.boobs.oz + state.boobs.sz * 0.08
+			local leftOffset = CFrame.new(-state.boobs.ox + (-sxCap), state.boobs.oy + state.boobs.sy, forwardZ) * CFrame.Angles(state.boobs.rx, state.boobs.yw, state.boobs.ry)
+			local rightOffset = CFrame.new(state.boobs.ox + sxCap, state.boobs.oy + state.boobs.sy, forwardZ) * CFrame.Angles(state.boobs.rx, -state.boobs.yw, -state.boobs.ry)
+
+			if leftWeld then leftWeld.C0 = leftOffset end
+			if rightWeld then rightWeld.C0 = rightOffset end
+			if leftNippleWeld and left then leftNippleWeld.C0 = CFrame.new(0, 0, offsetToFront(left.Size, leftNipple.Size) + popForward) end
+			if rightNippleWeld and right then rightNippleWeld.C0 = CFrame.new(0, 0, offsetToFront(right.Size, rightNipple.Size) + popForward) end
+			if leftAreolaWeld and left then leftAreolaWeld.C0 = CFrame.new(0, 0, offsetToFront(left.Size, leftAreola.Size) - (backGap - nudge)) end
+			if rightAreolaWeld and right then rightAreolaWeld.C0 = CFrame.new(0, 0, offsetToFront(right.Size, rightAreola.Size) - (backGap - nudge)) end
+		end)
+
+		originalIO.bodyModsEnsureColorWatcher()
+		originalIO.bodyModsConnectAppearanceLoaded(humanoid, function()
+			Defer(function()
+				local refreshed = originalIO.bodyModsGetSkinColor()
+				for _, part in ipairs({ left, right }) do
+					if part and part.Parent then
+						part.Color = refreshed
+					end
+				end
+			end)
+		end)
+
+		originalIO.bodyModsEnsureSpawnConnection()
+		DebugNotif('Boobs '..tostring(size),1.5)
+	end
+
+	originalIO.bodyModsRemoveBoobs = function()
+		local character = originalIO.bodyModsGetCharacter()
+		if not character then
+			return
+		end
+
+		state.boobs.conn = originalIO.bodyModsDisconnectConnection(state.boobs.conn)
+		state.boobs.active = false
+
+		local toRemove = {}
+		for _, part in ipairs(character:GetChildren()) do
+			if part:IsA('BasePart') and (part.Name == 'Boob' or part.Name == 'Nipple' or part.Name == 'Areola') then
+				Insert(toRemove, part)
+			end
+		end
+		for _, part in ipairs(toRemove) do
+			part.CanCollide = false
+			part.CanTouch = false
+			part.CanQuery = false
+			TweenService:Create(part, TweenInfo.new(0.28, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Transparency = 1 }):Play()
+		end
+		Delay(0.30, function()
+			for _, part in ipairs(toRemove) do
+				if part and part.Parent then
+					part:Destroy()
+				end
+			end
+		end)
+
+		originalIO.bodyModsEnsureColorWatcher()
+		DebugNotif('Boobs Removed',1.5)
+	end
+
+	originalIO.bodyModsApplyAss = function(size)
+		local character = originalIO.bodyModsGetCharacter(true)
+		local humanoid = originalIO.bodyModsGetHumanoid(true)
+		if not character or not humanoid then
+			return
+		end
+		local torso = originalIO.bodyModsGetTorso(false)
+		if not torso then
+			return
+		end
+
+		for _, part in ipairs(character:GetChildren()) do
+			if part:IsA('BasePart') and part.Name == 'Cheek' then
+				part:Destroy()
+			end
+		end
+
+		local skin = originalIO.bodyModsGetSkinColor()
+		local baseSize = Vector3.new(1.1, 1.1, 1.1)
+		local cheekSize = baseSize * size
+		local radius = cheekSize.Y * 0.5
+
+		state.ass.oy = (humanoid.RigType == Enum.HumanoidRigType.R15) and (-(torso.Size.Y * 0.35)) or 0.75
+		state.ass.oz = -(torso.Size.Z * 0.5 + radius * 0.45)
+
+		local function createCheek(side)
+			local cheek = Instance.new('Part')
+			cheek.Shape = Enum.PartType.Ball
+			cheek.Size = cheekSize
+			cheek.Color = skin
+			cheek.Material = Enum.Material.SmoothPlastic
+			cheek.Anchored = false
+			cheek.CanCollide = false
+			cheek.CanTouch = false
+			cheek.CanQuery = false
+			cheek.Name = 'Cheek'
+			cheek.Parent = character
+
+			local weld = Instance.new('Weld')
+			weld.Part0 = cheek
+			weld.Part1 = torso
+			weld.C0 = CFrame.new(side * state.ass.ox, state.ass.oy, state.ass.oz)
+			weld.Parent = cheek
+
+			return cheek, weld
+		end
+
+		local left, leftWeld = createCheek(-1)
+		local right, rightWeld = createCheek(1)
+
+		state.ass.size = size
+		state.ass.active = true
+		state.ass.conn = originalIO.bodyModsDisconnectConnection(state.ass.conn)
+		state.ass.sy = state.ass.sy or 0
+		state.ass.vy = state.ass.vy or 0
+		state.ass.sz = state.ass.sz or 0
+		state.ass.vz = state.ass.vz or 0
+		state.ass.sx = state.ass.sx or 0
+		state.ass.vx = state.ass.vx or 0
+		state.ass.rx = state.ass.rx or 0
+		state.ass.vrx = state.ass.vrx or 0
+		state.ass.ry = state.ass.ry or 0
+		state.ass.rv = state.ass.rv or 0
+		state.ass.yw = state.ass.yw or 0
+		state.ass.vyw = state.ass.vyw or 0
+		state.ass.llv = state.ass.llv or Vector3.zero
+		state.ass.hcf = nil
+
+		state.ass.conn = RunService.RenderStepped:Connect(function(dt)
+			local currentChar = originalIO.bodyModsGetCharacter()
+			if not currentChar or not currentChar.Parent then
+				return
+			end
+			local hrp = currentChar:FindFirstChild('HumanoidRootPart')
+			if not hrp then
+				return
+			end
+			local velocity = hrp.AssemblyLinearVelocity or hrp.Velocity
+			local localVel = hrp.CFrame:VectorToObjectSpace(velocity)
+			local angular = hrp.AssemblyAngularVelocity or Vector3.zero
+			local localAng = hrp.CFrame:VectorToObjectSpace(angular)
+
+			local targetY = math.clamp(-localVel.Y * 0.045, -0.20, 0.20)
+			local targetZ = math.clamp(localVel.Z * 0.042, -0.18, 0.18)
+			local targetX = math.clamp(localVel.X * 0.045, -0.18, 0.18)
+			local targetPitch = math.clamp(localAng.X * 0.70, -0.45, 0.45)
+			local targetRoll = math.clamp(-localAng.Y * 0.70, -0.45, 0.45)
+			local targetYaw = math.clamp(-localAng.Z * 0.60, -0.40, 0.40)
+
+			local kTrans, dTrans = 48, 2.4
+			local kRot, dRot = 44, 2.2
+			state.ass.sy, state.ass.vy = originalIO.bodyModsSpring(state.ass.sy, state.ass.vy, targetY, kTrans, dTrans, dt)
+			state.ass.sz, state.ass.vz = originalIO.bodyModsSpring(state.ass.sz, state.ass.vz, targetZ, kTrans, dTrans, dt)
+			state.ass.sx, state.ass.vx = originalIO.bodyModsSpring(state.ass.sx, state.ass.vx, targetX, kTrans, dTrans, dt)
+			state.ass.rx, state.ass.vrx = originalIO.bodyModsSpring(state.ass.rx, state.ass.vrx, targetPitch, kRot, dRot, dt)
+			state.ass.ry, state.ass.rv = originalIO.bodyModsSpring(state.ass.ry, state.ass.rv, targetRoll, kRot, dRot, dt)
+			state.ass.yw, state.ass.vyw = originalIO.bodyModsSpring(state.ass.yw, state.ass.vyw, targetYaw, kRot, dRot, dt)
+
+			local sxCap = math.clamp(state.ass.sx, -state.ass.ox * 0.5, state.ass.ox * 0.5)
+			local tzCap = math.clamp(state.ass.sz, -0.14, 0.14)
+			local leftOffset = CFrame.new(-state.ass.ox + (-sxCap), state.ass.oy + state.ass.sy, state.ass.oz + tzCap) * CFrame.Angles(state.ass.rx, state.ass.yw, state.ass.ry)
+			local rightOffset = CFrame.new(state.ass.ox + sxCap, state.ass.oy + state.ass.sy, state.ass.oz + tzCap) * CFrame.Angles(state.ass.rx, -state.ass.yw, -state.ass.ry)
+
+			if leftWeld then leftWeld.C0 = leftOffset end
+			if rightWeld then rightWeld.C0 = rightOffset end
+		end)
+
+		originalIO.bodyModsEnsureColorWatcher()
+		originalIO.bodyModsConnectAppearanceLoaded(humanoid, originalIO.bodyModsOnAppearanceLoaded)
+		originalIO.bodyModsEnsureSpawnConnection()
+		DebugNotif('Ass '..tostring(size),1.5)
+	end
+
+	originalIO.bodyModsRemoveAss = function()
+		local character = originalIO.bodyModsGetCharacter()
+		if not character then
+			return
+		end
+
+		state.ass.conn = originalIO.bodyModsDisconnectConnection(state.ass.conn)
+		state.ass.active = false
+
+		local toRemove = {}
+		for _, part in ipairs(character:GetChildren()) do
+			if part:IsA('BasePart') and part.Name == 'Cheek' then
+				Insert(toRemove, part)
+			end
+		end
+		for _, part in ipairs(toRemove) do
+			part.CanCollide = false
+			part.CanTouch = false
+			part.CanQuery = false
+			TweenService:Create(part, TweenInfo.new(0.28, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Transparency = 1 }):Play()
+		end
+		Delay(0.30, function()
+			for _, part in ipairs(toRemove) do
+				if part and part.Parent then
+					part:Destroy()
+				end
+			end
+		end)
+
+		originalIO.bodyModsEnsureColorWatcher()
+		DebugNotif('Ass Removed',1.5)
+	end
+
+	originalIO.bodyModsApplyPP = function(length)
+		local character = originalIO.bodyModsGetCharacter(true)
+		local humanoid = originalIO.bodyModsGetHumanoid(true)
+		if not character or not humanoid then
+			return
+		end
+		local torso = originalIO.bodyModsGetTorso(false)
+		if not torso then
+			return
+		end
+
+		for _, part in ipairs(character:GetChildren()) do
+			if part:IsA('BasePart') and (part.Name == 'Balls' or part.Name == 'penis') then
+				part:Destroy()
+			end
+		end
+
+		local value = tonumber(length) or 1
+		value = math.clamp(value, 0.5, 6)
+		state.pp.len = value
+
+		local skin = originalIO.bodyModsGetSkinColor()
+		local shaftBaseLength = 2.0
+		local shaftLength = shaftBaseLength * value
+
+		local function createPart(shape, size, color, name)
+			local part = Instance.new('Part')
+			part.Shape = shape
+			part.Size = size
+			part.Color = color
+			part.Material = Enum.Material.SmoothPlastic
+			part.Anchored = false
+			part.CanCollide = false
+			part.CanTouch = false
+			part.CanQuery = false
+			part.Name = name
+			part.Parent = character
+			return part
+		end
+
+		local function weldConstraint(part0, part1)
+			local weld = Instance.new('WeldConstraint')
+			weld.Part0 = part0
+			weld.Part1 = part1
+			weld.Parent = part0
+		end
+
+		local offsetY = (humanoid.RigType == Enum.HumanoidRigType.R15) and -1.0 or -1.5
+		local leftBall = createPart(Enum.PartType.Ball, Vector3.new(1.2, 1.2, 1.2), skin, 'Balls')
+		local rightBall = createPart(Enum.PartType.Ball, Vector3.new(1.2, 1.2, 1.2), skin, 'Balls')
+		local shaft = createPart(Enum.PartType.Cylinder, Vector3.new(shaftLength, 0.70, 0.70), skin, 'penis')
+		local tip = createPart(Enum.PartType.Ball, Vector3.new(0.70, 0.70, 0.70), pinkColor, 'penis')
+
+		leftBall.CFrame = torso.CFrame * CFrame.new(-0.25, offsetY, -0.80)
+		rightBall.CFrame = torso.CFrame * CFrame.new(0.25, offsetY, -0.80)
+		local forwardShift = (shaftLength - shaftBaseLength) * 0.5
+		shaft.CFrame = torso.CFrame * CFrame.new(0.00, offsetY + 0.70, -1.35) * CFrame.Angles(0, math.rad(270), 0) * CFrame.new(-forwardShift, 0, 0)
+		tip.CFrame = shaft.CFrame * CFrame.new(-shaftLength * 0.5, 0, 0)
+
+		weldConstraint(leftBall, torso)
+		weldConstraint(rightBall, torso)
+		weldConstraint(shaft, torso)
+		weldConstraint(tip, shaft)
+
+		state.pp.active = true
+		state.pp.wS = nil
+		state.pp.wTip = nil
+		state.pp.sh = shaft
+		state.pp.dr = tip
+
+		originalIO.bodyModsEnsureColorWatcher()
+		originalIO.bodyModsConnectAppearanceLoaded(humanoid, originalIO.bodyModsOnAppearanceLoaded)
+		originalIO.bodyModsEnsureSpawnConnection()
+		DebugNotif('penis '..tostring(value),1.5)
+	end
+
+	originalIO.bodyModsRemovePP = function()
+		local character = originalIO.bodyModsGetCharacter()
+		if not character then
+			return
+		end
+
+		local toRemove = {}
+		for _, part in ipairs(character:GetChildren()) do
+			if part:IsA('BasePart') and (part.Name == 'Balls' or part.Name == 'penis') then
+				Insert(toRemove, part)
+			end
+		end
+		for _, part in ipairs(toRemove) do
+			part.CanCollide = false
+			part.CanTouch = false
+			part.CanQuery = false
+			TweenService:Create(part, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Transparency = 1 }):Play()
+		end
+		Delay(0.27, function()
+			for _, part in ipairs(toRemove) do
+				if part and part.Parent then
+					part:Destroy()
+				end
+			end
+		end)
+
+		state.pp.animConn = originalIO.bodyModsDisconnectConnection(state.pp.animConn)
+		state.pp.active = false
+		state.pp.wS = nil
+		state.pp.wTip = nil
+		state.pp.sh = nil
+		state.pp.dr = nil
+		originalIO.bodyModsEnsureColorWatcher()
+		DebugNotif('PP Removed',1.5)
+	end
+
+	originalIO.bodyModsReapplyOnSpawn = function(newCharacter)
+		Spawn(function()
+			local humanoid = newCharacter:WaitForChild('Humanoid', 10)
+			if state.boobs.active then
+				Spawn(function()
+					if originalIO.bodyModsWaitFor({ 'UpperTorso', 'Torso' }, 10) then
+						originalIO.bodyModsApplyBoobs(state.boobs.size or 1)
+					end
+				end)
+			end
+			if state.ass.active then
+				Spawn(function()
+					if humanoid and humanoid.RigType == Enum.HumanoidRigType.R15 then
+						if originalIO.bodyModsWaitFor({ 'LowerTorso' }, 10) then
+							originalIO.bodyModsApplyAss(state.ass.size or 1)
+						end
+					else
+						if originalIO.bodyModsWaitFor({ 'Torso' }, 10) then
+							originalIO.bodyModsApplyAss(state.ass.size or 1)
+						end
+					end
+				end)
+			end
+			if state.pp.active then
+				Spawn(function()
+					if humanoid and humanoid.RigType == Enum.HumanoidRigType.R15 then
+						if originalIO.bodyModsWaitFor({ 'LowerTorso' }, 10) then
+							originalIO.bodyModsApplyPP(state.pp.len or 1)
+						end
+					else
+						if originalIO.bodyModsWaitFor({ 'Torso' }, 10) then
+							originalIO.bodyModsApplyPP(state.pp.len or 1)
+						end
+					end
+				end)
+			end
+		end)
+	end
+
+	originalIO.bodyModsEnsureSpawnConnection = function()
+		if state.spawnConn and state.spawnConn.Connected then
+			return
+		end
+		state.spawnConn = LocalPlayer.CharacterAdded:Connect(originalIO.bodyModsReapplyOnSpawn)
+	end
+
+	originalIO.bodyModsEnsurePlayerAppearanceHook = function()
+		state.apConn = originalIO.bodyModsDisconnectConnection(state.apConn)
+		state.apConn = originalIO.bodyModsConnectAppearanceLoaded(LocalPlayer, originalIO.bodyModsOnAppearanceLoaded)
+	end
+
+	originalIO.bodyModsEnsurePlayerAppearanceHook()
+	originalIO.bodyModsEnsureSpawnConnection()
+
+	cmd.add({'boobs','boobies'},{'boobs <size> (boobies)','Boobs'},function(arg)
+		local value = tonumber(arg) or state.boobs.size or 1
+		value = math.clamp(value, 1, 8)
+		originalIO.bodyModsApplyBoobs(value)
+	end, true)
+
+	cmd.add({'unboobs','unboobies','noboobs','noboobies'},{'unboobs (unboobies,noboobs,noboobies)','Boobs'},function()
+		originalIO.bodyModsRemoveBoobs()
+	end)
+
+	cmd.add({'ass','booty'},{'ass <size> (booty)','Ass'},function(arg)
+		local value = tonumber(arg) or state.ass.size or 1
+		value = math.clamp(value, 1, 8)
+		originalIO.bodyModsApplyAss(value)
+	end, true)
+
+	cmd.add({'unass','noass'},{'unass (noass)','Ass'},function()
+		originalIO.bodyModsRemoveAss()
+	end)
+
+	cmd.add({'penis','pp'},{'penis <length> (pp)','penis'},function(arg)
+		local value = tonumber(arg) or state.pp.len or 1
+		value = math.clamp(value, 0.5, 6)
+		originalIO.bodyModsApplyPP(value)
+	end, true)
+
+	cmd.add({'unpenis','unpp','nopenis','nopp'},{'unpenis (unpp,nopenis,nopp)','penis'},function()
+		originalIO.bodyModsRemovePP()
+	end)
+end
+
+
+-- [[ NPC SECTION ]] --
 cmd.add({"flingnpcs"}, {"flingnpcs", "Flings NPCs"}, function()
 	local npcs = {}
 
@@ -29800,16 +37244,38 @@ local NAUIMANAGER = {
 		and NAStuff.NASCREENGUI:FindFirstChild("binders"):FindFirstChild("Container"):FindFirstChild("List");
 }
 
-local resizeXY={
-	Top = {Vector2.new(0,-1),    Vector2.new(0,-1),    "rbxassetid://2911850935"},
-	Bottom = {Vector2.new(0,1),    Vector2.new(0,0),    "rbxassetid://2911850935"},
-	Left = {Vector2.new(-1,0),    Vector2.new(1,0),    "rbxassetid://2911851464"},
-	Right = {Vector2.new(1,0),    Vector2.new(0,0),    "rbxassetid://2911851464"},
+originalIO.resizeCursors=function(key, fallback)
+	if type(getcustomasset) ~= "function" then
+		return fallback
+	end
 
-	TopLeft = {Vector2.new(-1,-1),    Vector2.new(1,-1),    "rbxassetid://2911852219"},
-	TopRight = {Vector2.new(1,-1),    Vector2.new(0,-1),    "rbxassetid://2911851859"},
-	BottomLeft = {Vector2.new(-1,1),    Vector2.new(1,0),    "rbxassetid://2911851859"},
-	BottomRight = {Vector2.new(1,1),    Vector2.new(0,0),    "rbxassetid://2911852219"},
+	if not (NAfiles and NAfiles.NAASSETSFILEPATH and NAImageAssets and NAImageAssets[key]) then
+		return fallback
+	end
+
+	local suc, res = pcall(getcustomasset, NAfiles.NAASSETSFILEPATH.."/"..NAImageAssets[key])
+	if suc and res then
+		return res
+	end
+
+	return fallback
+end
+
+NAStuff.resizeVerticalAsset = originalIO.resizeCursors("ResizeVertical", "rbxassetid://2911850935")
+NAStuff.resizeHorizontalAsset = originalIO.resizeCursors("ResizeHorizontal", "rbxassetid://2911851464")
+NAStuff.resizeDiagonal1Asset = originalIO.resizeCursors("ResizeDiagonal1", "rbxassetid://2911851859")
+NAStuff.resizeDiagonal2Asset = originalIO.resizeCursors("ResizeDiagonal2", "rbxassetid://2911852219")
+
+local resizeXY={
+	Top = {Vector2.new(0,-1),    Vector2.new(0,-1),    NAStuff.resizeVerticalAsset}, -- Vertical16x16.png
+	Bottom = {Vector2.new(0,1),    Vector2.new(0,0),    NAStuff.resizeVerticalAsset}, -- Vertical16x16.png
+	Left = {Vector2.new(-1,0),    Vector2.new(1,0),    NAStuff.resizeHorizontalAsset}, -- Horizontal16x16.png
+	Right = {Vector2.new(1,0),    Vector2.new(0,0),    NAStuff.resizeHorizontalAsset}, -- Horizontal16x16.png
+
+	TopLeft = {Vector2.new(-1,-1),    Vector2.new(1,-1),    NAStuff.resizeDiagonal2Asset}, -- Diagonal216x16.png
+	TopRight = {Vector2.new(1,-1),    Vector2.new(0,-1),    NAStuff.resizeDiagonal1Asset}, -- Diagonal116x16.png
+	BottomLeft = {Vector2.new(-1,1),    Vector2.new(1,0),    NAStuff.resizeDiagonal1Asset}, -- Diagonal116x16.png
+	BottomRight = {Vector2.new(1,1),    Vector2.new(0,0),    NAStuff.resizeDiagonal2Asset}, -- Diagonal216x16.png
 }
 
 local fillSizes={
@@ -29896,10 +37362,149 @@ local TabManager = {
 	fallbackIndex = 0;
 }
 
-local tabsLayout = TabManager.holder and (TabManager.holder:FindFirstChildWhichIsA("UIListLayout") or TabManager.holder:FindFirstChildWhichIsA("UIGridLayout"))
-if tabsLayout and tabsLayout.SortOrder ~= Enum.SortOrder.LayoutOrder then
+BUILDER_ICON_FONT_PATH = "rbxasset://LuaPackages/Packages/_Index/BuilderIcons/BuilderIcons/BuilderIcons.json"
+
+originalIO.escapeRichTextText = function(text)
+	text = tostring(text or "")
+	if text == "" then
+		return ""
+	end
+	return text:gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;")
+end
+
+originalIO.colorValueToHex = function(color)
+	if typeof(color) == "Color3" then
+		local r = math.clamp(math.floor(color.R * 255 + 0.5), 0, 255)
+		local g = math.clamp(math.floor(color.G * 255 + 0.5), 0, 255)
+		local b = math.clamp(math.floor(color.B * 255 + 0.5), 0, 255)
+		return string.format("#%02X%02X%02X", r, g, b)
+	elseif type(color) == "string" and color ~= "" then
+		return color
+	end
+	return nil
+end
+
+originalIO.resolveTabIconMarkup = function(iconOption, opts)
+	if iconOption == nil then
+		return nil
+	end
+	opts = opts or {}
+	local isActive = opts.isActive == true
+	local defaultColor = opts.defaultColor
+	local name = iconOption
+	local gap
+	local tint
+	local stateBold
+	if type(iconOption) == "table" then
+		name = iconOption.icon or iconOption.name or iconOption[1]
+		gap = iconOption.gap or iconOption.spacing
+		if iconOption.color or iconOption.tint then
+			tint = iconOption.color or iconOption.tint
+		end
+		if isActive and iconOption.activeBold ~= nil then
+			stateBold = iconOption.activeBold
+		elseif not isActive and iconOption.inactiveBold ~= nil then
+			stateBold = iconOption.inactiveBold
+		elseif isActive and iconOption.activeFilled ~= nil then
+			stateBold = iconOption.activeFilled
+		elseif not isActive and iconOption.inactiveFilled ~= nil then
+			stateBold = iconOption.inactiveFilled
+		end
+		if stateBold == nil then
+			if iconOption.bold ~= nil then
+				stateBold = iconOption.bold
+			elseif iconOption.filled ~= nil then
+				stateBold = iconOption.filled
+			elseif iconOption.weight == "bold" or iconOption.variant == "filled" then
+				stateBold = true
+			end
+		end
+	end
+	if type(name) ~= "string" then
+		return nil
+	end
+	local trimmed = name:match("^%s*(.-)%s*$")
+	if not trimmed or trimmed == "" then
+		return nil
+	end
+	local glyph = trimmed:gsub("%s+", "")
+	glyph = originalIO.escapeRichTextText(glyph)
+	if glyph == "" then
+		return nil
+	end
+	if stateBold == nil then
+		stateBold = isActive
+	end
+	if stateBold then
+		glyph = "<b>"..glyph.."</b>"
+	end
+	local markup = string.format('<font family="%s">%s</font>', BUILDER_ICON_FONT_PATH, glyph)
+	local colorHex = originalIO.colorValueToHex(tint or defaultColor)
+	if colorHex then
+		markup = string.format('<font color="%s">%s</font>', colorHex, markup)
+	end
+	local iconGap = " "
+	if type(gap) == "number" and gap > 0 then
+		iconGap = string.rep(" ", math.clamp(math.floor(gap + 0.5), 1, 8))
+	elseif type(gap) == "string" and gap ~= "" then
+		iconGap = gap
+	end
+	return markup, iconGap
+end
+
+originalIO.composeTabTitleText = function(info, opts)
+	if not info then
+		return ""
+	end
+	opts = opts or {}
+	local rawTitle = info.displayName
+	if type(rawTitle) ~= "string" or rawTitle == "" then
+		rawTitle = info.name or ""
+	end
+	local safeDisplay = originalIO.escapeRichTextText(rawTitle)
+	if safeDisplay == "" and info.name and info.name ~= rawTitle then
+		safeDisplay = originalIO.escapeRichTextText(info.name)
+	end
+	local iconMarkup, iconGap = originalIO.resolveTabIconMarkup(info.textIcon, {
+		isActive = opts.isActive,
+		defaultColor = opts.defaultColor,
+	})
+	if iconMarkup then
+		return iconMarkup .. (iconGap or " ") .. safeDisplay
+	end
+	return safeDisplay
+end
+
+originalIO.applyTabDisplayText = function(info, opts)
+	if not info or not info.button then
+		return
+	end
+	opts = opts or {}
+	local title = info.button:FindFirstChild("Title")
+	if not title then
+		return
+	end
+	if title.RichText ~= true then
+		title.RichText = true
+	end
+	local isActive = opts.isActive
+	if isActive == nil then
+		isActive = info._isActive
+	end
+	local defaultColor = opts.defaultColor
+	if defaultColor == nil then
+		defaultColor = NAUISTROKER or DEFAULT_UI_STROKE_COLOR
+	end
+	title.Text = originalIO.composeTabTitleText(info, {
+		isActive = isActive,
+		defaultColor = defaultColor,
+	})
+end
+
+NAStuff.tabsLayout = TabManager.holder and (TabManager.holder:FindFirstChildWhichIsA("UIListLayout") or TabManager.holder:FindFirstChildWhichIsA("UIGridLayout"))
+if NAStuff.tabsLayout and NAStuff.tabsLayout.SortOrder ~= Enum.SortOrder.LayoutOrder then
 	pcall(function()
-		tabsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+		NAStuff.tabsLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	end)
 end
 
@@ -30066,21 +37671,34 @@ NAmanage.prepareAllTabDisplay=function(allInfo)
 end
 
 NAmanage.updateTabVisual=function(tabInfo, isActive)
-	if not tabInfo or not tabInfo.button then
+	if not tabInfo then
+		return
+	end
+	tabInfo._isActive = isActive and true or false
+	if not tabInfo.button then
 		return
 	end
 	local btn = tabInfo.button
 	btn.BackgroundTransparency = isActive and 0.1 or 0.25
-	local stroke = btn:FindFirstChildWhichIsA("UIStroke")
+	local stroke = btn:FindFirstChildWhichIsA("UIStroke", true)
 	if stroke then
-		stroke.Color = isActive and Color3.fromRGB(194, 132, 255) or Color3.fromRGB(154, 99, 255)
+		NAgui.RegisterColoredStroke(stroke)
+		local computeColor = NAmanage.getTabStrokeColor
+		if typeof(computeColor) == "function" then
+			stroke.Color = computeColor(isActive)
+		else
+			stroke.Color = NAUISTROKER or DEFAULT_UI_STROKE_COLOR
+		end
 	end
 	local title = btn:FindFirstChild("Title")
 	if title then
-		title.TextColor3 = isActive and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(234, 234, 244)
-		if tabInfo.displayName then
-			title.Text = tabInfo.displayName
+		if originalIO.applyTabDisplayText then
+			originalIO.applyTabDisplayText(tabInfo, {
+				isActive = isActive,
+				defaultColor = NAUISTROKER or DEFAULT_UI_STROKE_COLOR,
+			})
 		end
+		title.TextColor3 = isActive and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(234, 234, 244)
 	end
 end
 
@@ -30115,6 +37733,9 @@ NAgui.setTab=function(name)
 	end
 
 	TabManager.current = name
+	if name == TAB_BASIC_INFO and NAgui.RefreshBasicInfo then
+		pcall(NAgui.RefreshBasicInfo)
+	end
 	if info.page then
 		NAUIMANAGER.SettingsList = info.page
 	end
@@ -30138,14 +37759,22 @@ NAgui.addTab=function(name, options)
 	if type(name) ~= "string" or name == "" then
 		return nil
 	end
+	local textIconOption = options and options.textIcon
 	if TabManager.tabs[name] then
+		local existingInfo = TabManager.tabs[name]
+		if textIconOption ~= nil and existingInfo then
+			existingInfo.textIcon = textIconOption
+			if originalIO.applyTabDisplayText then
+				originalIO.applyTabDisplayText(existingInfo, { isActive = existingInfo._isActive })
+			end
+		end
 		if options and options.default then
 			NAgui.setTab(name)
 		end
-		return TabManager.tabs[name]
+		return existingInfo
 	end
 
-	local displayName = (options and options.displayText) or name
+	local displayName = tostring((options and options.displayText) or name)
 	local button
 	local layoutOrder = options and options.order or (#TabManager.order + 1)
 	if TabManager.holder then
@@ -30164,6 +37793,7 @@ NAgui.addTab=function(name, options)
 		end
 		button.LayoutOrder = layoutOrder
 		button.Parent = TabManager.holder
+		NAgui.RegisterStrokesFrom(button)
 		local interact = button:FindFirstChild("Interact") or button
 		MouseButtonFix(interact, function()
 			NAgui.setTab(name)
@@ -30178,6 +37808,8 @@ NAgui.addTab=function(name, options)
 			page = TabManager.fallback.page;
 			button = button;
 			layoutIndex = TabManager.fallback.layoutIndex or 0;
+			textIcon = textIconOption;
+			_isActive = false;
 		}
 		TabManager.fallback = nil
 	else
@@ -30199,7 +37831,16 @@ NAgui.addTab=function(name, options)
 			page = page;
 			button = button;
 			layoutIndex = 0;
+			textIcon = textIconOption;
+			_isActive = false;
 		}
+	end
+
+	if info.page then
+		NAgui.RegisterStrokesFrom(info.page)
+	end
+	if info.button and originalIO.applyTabDisplayText then
+		originalIO.applyTabDisplayText(info, { isActive = info._isActive })
 	end
 
 	info.order = layoutOrder
@@ -30239,7 +37880,7 @@ end
 SpawnCall(function()
 	for _,v in ipairs(NAStuff.NASCREENGUI:GetDescendants()) do
 		if v:IsA("UIStroke") then
-			Insert(NACOLOREDELEMENTS, v)
+			NAgui.RegisterColoredStroke(v)
 		end
 	end
 end)
@@ -30292,12 +37933,18 @@ cmd.add({"rename"}, {"rename <text>", "Renames the admin UI placeholder to the g
 	if NAUIMANAGER.cmdInput and NAUIMANAGER.cmdInput.PlaceholderText then
 		NAUIMANAGER.cmdInput.PlaceholderText = newName
 	end
+	if NAmanage.UpdateAdminInfoTabDisplayName then
+		NAmanage.UpdateAdminInfoTabDisplayName()
+	end
 end, true)
 
 cmd.add({"unname"}, {"unname", "Resets the admin UI placeholder name to default"}, function()
 	adminName = getgenv().NATestingVer and "NA Testing" or "Nameless Admin"
 	if NAUIMANAGER.cmdInput and NAUIMANAGER.cmdInput.PlaceholderText then
 		NAUIMANAGER.cmdInput.PlaceholderText = isAprilFools() and '🤡 '..adminName..curVer..' 🤡' or getSeasonEmoji()..' '..adminName..curVer..' '..getSeasonEmoji()
+	end
+	if NAmanage.UpdateAdminInfoTabDisplayName then
+		NAmanage.UpdateAdminInfoTabDisplayName()
 	end
 end)
 
@@ -30323,7 +37970,15 @@ NAgui.commands = function()
 		local Cmd = NAUIMANAGER.commandExample:Clone()
 		Cmd.Parent = cList
 		Cmd.Name = cmdName
-		Cmd.Text = " "..tbl[2][1]
+		local displayText = fixStupidSearchGoober(cmdName, tbl)
+		if displayText and displayText ~= "" then
+			if type(tbl[2]) == "table" then
+				tbl[2][1] = displayText
+			end
+		else
+			displayText = (type(tbl[2]) == "table" and tbl[2][1]) or cmdName
+		end
+		Cmd.Text = " "..displayText
 		Cmd.Position = UDim2.new(0, 0, 0, yOffset)
 
 		Cmd.MouseEnter:Connect(function()
@@ -30344,6 +37999,9 @@ NAgui.commands = function()
 	cList.CanvasSize = UDim2.new(0, 0, 0, yOffset)
 	--cFrame.Position = UDim2.new(0.43, 0, 0.4, 0)
 	NAmanage.centerFrame(cFrame)
+	if NAgui.filterCommandList then
+		NAgui.filterCommandList(NAUIMANAGER.commandsFilter and NAUIMANAGER.commandsFilter.Text or "")
+	end
 end
 NAgui.chatlogs = function()
 	if NAUIMANAGER.chatLogsFrame then
@@ -30422,8 +38080,13 @@ NAgui.resizeable = function(ui, min, max)
 	local dragInput
 	local dragEndedConn
 
+	local function isMenuMinimized()
+		return ui and ui.GetAttribute and ui:GetAttribute("NAMenuMinimized") == true
+	end
+
 	local function updateResize(currentPos)
 		local ok, err = pcall(function()
+			if isMenuMinimized() then return end
 			if not dragging or not mode or not screenGui or not screenGui.AbsoluteSize then return end
 			local map = resizeXY and resizeXY[mode.Name]
 			if not map then return end
@@ -30630,6 +38293,9 @@ NAgui.addButton = function(label, callback)
 	button.Parent = NAUIMANAGER.SettingsList
 	button.LayoutOrder = NAgui._nextLayoutOrder()
 	NAmanage.registerElementForCurrentTab(button)
+	if NAgui.RegisterStrokesFrom then
+		NAgui.RegisterStrokesFrom(button)
+	end
 
 	MouseButtonFix(button.Interact,function()
 		pcall(callback)
@@ -30643,7 +38309,84 @@ NAgui.addSection = function(titleText)
 	section.Parent = NAUIMANAGER.SettingsList
 	section.LayoutOrder = NAgui._nextLayoutOrder()
 	NAmanage.registerElementForCurrentTab(section)
+	if NAgui.RegisterStrokesFrom then
+		NAgui.RegisterStrokesFrom(section)
+	end
 end
+
+NAgui.addInfo = function(label, value)
+	if not NAUIMANAGER.SettingsList then return nil end
+	local info = templates.Input:Clone()
+	info.Title.Text = label
+	info.Parent = NAUIMANAGER.SettingsList
+	info.LayoutOrder = NAgui._nextLayoutOrder()
+	NAmanage.registerElementForCurrentTab(info)
+	if NAgui.RegisterStrokesFrom then
+		NAgui.RegisterStrokesFrom(info)
+	end
+
+	local frame = info.InputFrame
+	if not frame then
+		return nil
+	end
+
+	local box = frame.InputBox
+	if not box then
+		return nil
+	end
+
+	local baseSize = frame.Size
+
+	box.Text = value or ""
+	box.PlaceholderText = ""
+	box.ClearTextOnFocus = false
+	box.TextEditable = false
+	box.Active = false
+	box.Selectable = false
+	box.CursorPosition = -1
+
+	box.Focused:Connect(function()
+		box:ReleaseFocus()
+	end)
+
+	local updateSize = function()
+		if frame:GetAttribute("NASkipAutoSize") then
+			frame.Size = baseSize
+			return
+		end
+
+		local width = box.TextBounds.X + 24
+		if width <= 24 then
+			local prev = frame:GetAttribute("NALastWidth")
+			if typeof(prev) == "number" and prev > 0 then
+				width = prev
+			end
+		end
+		local minWidth = frame:GetAttribute("NAMinWidth")
+		if typeof(minWidth) == "number" then
+			width = math.max(width, minWidth)
+		end
+
+		frame.Size = UDim2.new(0, width, 0, 30)
+		frame:SetAttribute("NALastWidth", width)
+	end
+
+	box:GetPropertyChangedSignal("Text"):Connect(updateSize)
+	frame:SetAttribute("NALastWidth", frame.AbsoluteSize.X > 0 and frame.AbsoluteSize.X or nil)
+	updateSize()
+
+	local interact = frame:FindFirstChild("Interact")
+	if interact then
+		interact.Visible = false
+	end
+
+	return box, info
+end
+
+NAgui._toggleRegistry = NAgui._toggleRegistry or {}
+NAgui._colorPickerRegistry = NAgui._colorPickerRegistry or {}
+NAgui._sliderRegistry = NAgui._sliderRegistry or {}
+NAgui._inputRegistry = NAgui._inputRegistry or {}
 
 NAgui.addToggle = function(label, defaultValue, callback)
 	if not NAUIMANAGER.SettingsList then return end
@@ -30657,7 +38400,7 @@ NAgui.addToggle = function(label, defaultValue, callback)
 	toggle.LayoutOrder = NAgui._nextLayoutOrder()
 	NAmanage.registerElementForCurrentTab(toggle)
 
-	local state = defaultValue
+	local state = defaultValue and true or false
 
 	local function updateVisual()
 		if state then
@@ -30671,15 +38414,54 @@ NAgui.addToggle = function(label, defaultValue, callback)
 		end
 	end
 
-	updateVisual()
+	local function setState(newValue, opts)
+		opts = opts or {}
+		local desired = newValue and true or false
+		if not opts.force and state == desired then
+			if opts.fire then
+				pcall(callback, state)
+			end
+			return
+		end
+		state = desired
+		updateVisual()
+		if opts.fire ~= false then
+			pcall(callback, state)
+		end
+	end
+
+	setState(state, { force = true, fire = false })
 
 	MouseButtonFix(toggle.Interact,function()
-		state = not state
-		updateVisual()
-		pcall(function()
-			callback(state)
-		end)
+		setState(not state, { force = true, fire = true })
 	end)
+
+	local entry = {
+		button = toggle;
+		get = function()
+			return state
+		end;
+		set = function(value, opts)
+			opts = opts or {}
+			if opts.force == nil then opts.force = true end
+			setState(value, opts)
+		end;
+	}
+	NAgui._toggleRegistry[label] = entry
+
+	toggle:GetPropertyChangedSignal("Parent"):Connect(function()
+		if not toggle.Parent and NAgui._toggleRegistry[label] == entry then
+			NAgui._toggleRegistry[label] = nil
+		end
+	end)
+
+	return toggle
+end
+
+NAgui.setToggleState = function(label, value, opts)
+	local entry = NAgui._toggleRegistry and NAgui._toggleRegistry[label]
+	if not entry then return end
+	entry.set(value, opts)
 end
 
 NAgui.addColorPicker = function(label, defaultColor, callback)
@@ -30696,6 +38478,198 @@ NAgui.addColorPicker = function(label, defaultColor, callback)
 	local slider = picker.ColorSlider
 	local rgb = picker.RGB
 	local hex = picker.HexInput
+	local rgbToggleContainer = picker:FindFirstChild("RGBToggle")
+	local autoRGBToggleButton
+	local autoRGBSwitch
+	local autoRGBIndicator
+	local autoRGBTitle
+	local function getSavedAutoRGBState()
+		if type(label) ~= "string" then
+			return nil
+		end
+		if not (NAmanage and type(NAmanage.NASettingsGet) == "function") then
+			return nil
+		end
+		local stored = NAmanage.NASettingsGet("colorPickerAutoRGB")
+		if type(stored) ~= "table" then
+			return nil
+		end
+		local value = stored[label]
+		if type(value) == "boolean" then
+			return value
+		end
+		return nil
+	end
+
+	local function persistAutoRGBState(state)
+		if type(label) ~= "string" then
+			return
+		end
+		if not (NAmanage and type(NAmanage.NASettingsGet) == "function" and type(NAmanage.NASettingsSet) == "function") then
+			return
+		end
+		local stored = NAmanage.NASettingsGet("colorPickerAutoRGB")
+		if type(stored) ~= "table" then
+			stored = {}
+		end
+		local nextStates = {}
+		for key, value in pairs(stored) do
+			nextStates[key] = value
+		end
+		nextStates[label] = state and true or false
+		NAmanage.NASettingsSet("colorPickerAutoRGB", nextStates)
+	end
+
+	local function createRGBToggleContainer()
+		local frame = Instance.new("Frame")
+		frame.Name = "RGBToggle"
+		frame.BackgroundColor3 = Color3.fromRGB(44, 44, 49)
+		frame.BorderSizePixel = 0
+		frame.Size = UDim2.new(0, 240, 0, 32)
+		frame.Position = UDim2.new(0, 20, 0, 115)
+		frame.ZIndex = 5
+		frame.Parent = picker
+
+		local corner = Instance.new("UICorner")
+		corner.Parent = frame
+
+		local stroke = Instance.new("UIStroke")
+		stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		stroke.Color = Color3.fromRGB(71, 71, 71)
+		stroke.Parent = frame
+
+		local title = Instance.new("TextLabel")
+		title.Name = "Title"
+		title.BackgroundTransparency = 1
+		title.Font = Enum.Font.Gotham
+		title.TextSize = 14
+		title.TextColor3 = Color3.fromRGB(244, 244, 249)
+		title.TextXAlignment = Enum.TextXAlignment.Left
+		title.AnchorPoint = Vector2.new(0, 0.5)
+		title.Position = UDim2.new(0, 12, 0.5, 0)
+		title.Size = UDim2.new(1, -60, 0, 16)
+		title.Text = "RGB Cycle"
+		title.Parent = frame
+		title.ZIndex = 5
+
+		return frame
+	end
+
+	if not (rgbToggleContainer and rgbToggleContainer:IsA("GuiObject")) then
+		rgbToggleContainer = createRGBToggleContainer()
+	end
+
+	autoRGBTitle = rgbToggleContainer and rgbToggleContainer:FindFirstChild("Title")
+
+	autoRGBToggleButton = rgbToggleContainer and rgbToggleContainer:FindFirstChild("Interact")
+	if not (autoRGBToggleButton and autoRGBToggleButton:IsA("GuiButton")) then
+		autoRGBToggleButton = Instance.new("TextButton")
+		autoRGBToggleButton.Name = "Interact"
+		autoRGBToggleButton.BackgroundTransparency = 1
+		autoRGBToggleButton.AutoButtonColor = false
+		autoRGBToggleButton.BorderSizePixel = 0
+		autoRGBToggleButton.Text = ""
+		autoRGBToggleButton.Size = UDim2.new(1, 0, 1, 0)
+		autoRGBToggleButton.ZIndex = (rgbToggleContainer and rgbToggleContainer.ZIndex or 1) + 1
+		autoRGBToggleButton.Parent = rgbToggleContainer
+	end
+
+	autoRGBSwitch = rgbToggleContainer and rgbToggleContainer:FindFirstChild("Switch")
+	if not (autoRGBSwitch and autoRGBSwitch:IsA("GuiObject")) then
+		autoRGBSwitch = Instance.new("Frame")
+		autoRGBSwitch.Name = "Switch"
+		autoRGBSwitch.BorderSizePixel = 0
+		autoRGBSwitch.AnchorPoint = Vector2.new(1, 0.5)
+		autoRGBSwitch.Position = UDim2.new(1, -12, 0.5, 0)
+		autoRGBSwitch.Size = UDim2.new(0, 45, 0, 22)
+		autoRGBSwitch.BackgroundColor3 = Color3.fromRGB(49, 49, 54)
+		autoRGBSwitch.Parent = rgbToggleContainer
+
+		local switchCorner = Instance.new("UICorner")
+		switchCorner.CornerRadius = UDim.new(0, 12)
+		switchCorner.Parent = autoRGBSwitch
+
+		local switchStroke = Instance.new("UIStroke")
+		switchStroke.Color = Color3.fromRGB(71, 71, 71)
+		switchStroke.Parent = autoRGBSwitch
+	end
+
+	autoRGBIndicator = autoRGBSwitch and autoRGBSwitch:FindFirstChild("Indicator")
+	if not (autoRGBIndicator and autoRGBIndicator:IsA("GuiObject")) then
+		autoRGBIndicator = Instance.new("Frame")
+		autoRGBIndicator.Name = "Indicator"
+		autoRGBIndicator.BorderSizePixel = 0
+		autoRGBIndicator.AnchorPoint = Vector2.new(0, 0.5)
+		autoRGBIndicator.Position = UDim2.new(0, 2, 0.5, 0)
+		autoRGBIndicator.Size = UDim2.new(0, 18, 0, 18)
+		autoRGBIndicator.BackgroundColor3 = Color3.fromRGB(114, 114, 124)
+		autoRGBIndicator.Parent = autoRGBSwitch
+
+		local indicatorCorner = Instance.new("UICorner")
+		indicatorCorner.CornerRadius = UDim.new(1, 0)
+		indicatorCorner.Parent = autoRGBIndicator
+
+		local indicatorStroke = Instance.new("UIStroke")
+		indicatorStroke.Color = Color3.fromRGB(83, 83, 83)
+		indicatorStroke.Parent = autoRGBIndicator
+	end
+
+	local autoRGBEnabled = false
+	local autoRGBSpeed = 0.1
+
+	local function updateAutoRGBToggleVisual()
+		if autoRGBSwitch then
+			autoRGBSwitch.BackgroundColor3 = autoRGBEnabled and Color3.fromRGB(70, 49, 104) or Color3.fromRGB(49, 49, 54)
+		end
+		if autoRGBIndicator then
+			local indicatorWidth = autoRGBIndicator.Size.X.Offset
+			if indicatorWidth == 0 then
+				indicatorWidth = math.max(autoRGBIndicator.AbsoluteSize.X, 18)
+			end
+			local padding = 2
+			autoRGBIndicator.Position = autoRGBEnabled
+				and UDim2.new(1, -indicatorWidth - padding, 0.5, 0)
+				or UDim2.new(0, padding, 0.5, 0)
+			autoRGBIndicator.BackgroundColor3 = autoRGBEnabled and Color3.fromRGB(154, 99, 255) or Color3.fromRGB(114, 114, 124)
+		end
+		if autoRGBTitle and autoRGBTitle:IsA("TextLabel") then
+			autoRGBTitle.Text = autoRGBEnabled and "RGB Cycle (ON)" or "RGB Cycle"
+			autoRGBTitle.TextColor3 = autoRGBEnabled and Color3.fromRGB(194, 194, 255) or Color3.fromRGB(244, 244, 249)
+		end
+	end
+
+	local function applyAutoRGBState(state, opts)
+		opts = opts or {}
+		local newState = state and true or false
+		if autoRGBEnabled == newState then
+			if not opts.skipVisual then
+				updateAutoRGBToggleVisual()
+			end
+			return
+		end
+		autoRGBEnabled = newState
+		if not opts.skipSave then
+			persistAutoRGBState(autoRGBEnabled)
+		end
+		updateAutoRGBToggleVisual()
+	end
+
+	local savedAutoRGB = getSavedAutoRGBState()
+	if type(savedAutoRGB) == "boolean" then
+		applyAutoRGBState(savedAutoRGB, { skipVisual = true, skipSave = true })
+	end
+
+	updateAutoRGBToggleVisual()
+
+	if autoRGBToggleButton then
+		autoRGBToggleButton.MouseButton1Click:Connect(function()
+			applyAutoRGBState(not autoRGBEnabled)
+		end)
+	end
+
+	if typeof(defaultColor) ~= "Color3" then
+		defaultColor = Color3.fromRGB(255, 255, 255)
+	end
 
 	local h, s, v = defaultColor:ToHSV()
 	local draggingMain = false
@@ -30704,7 +38678,8 @@ NAgui.addColorPicker = function(label, defaultColor, callback)
 	main.MainPoint.AnchorPoint = Vector2.new(0.5, 0.5)
 	slider.SliderPoint.AnchorPoint = Vector2.new(0.5, 0.5)
 
-	local function updateUI(pushToInputs)
+	local function updateUI(pushToInputs, opts)
+		opts = opts or {}
 		local color = Color3.fromHSV(h, s, v)
 		display.BackgroundColor3 = color
 		background.BackgroundColor3 = Color3.fromHSV(h, 1, 1)
@@ -30722,12 +38697,15 @@ NAgui.addColorPicker = function(label, defaultColor, callback)
 			hex.InputBox.Text = Format("#%02X%02X%02X", r, g, b)
 		end
 
-		pcall(function()
-			callback(color)
-		end)
+		if opts.fire ~= false then
+			pcall(function()
+				callback(color)
+			end)
+		end
 	end
 
 	local function parseRGBInputs()
+		applyAutoRGBState(false)
 		local r = tonumber(rgb.RInput.InputBox.Text) or 0
 		local g = tonumber(rgb.GInput.InputBox.Text) or 0
 		local b = tonumber(rgb.BInput.InputBox.Text) or 0
@@ -30745,6 +38723,7 @@ NAgui.addColorPicker = function(label, defaultColor, callback)
 	rgb.BInput.InputBox.FocusLost:Connect(parseRGBInputs)
 
 	hex.InputBox.FocusLost:Connect(function()
+		applyAutoRGBState(false)
 		local text = hex.InputBox.Text:gsub("#", ""):upper()
 		if text:match("^[0-9A-F]+$") and #text == 6 then
 			local r = tonumber(text:sub(1, 2), 16)
@@ -30760,6 +38739,7 @@ NAgui.addColorPicker = function(label, defaultColor, callback)
 	end)
 
 	local mouse = lp:GetMouse()
+	local runService = SafeGetService("RunService")
 
 	local function setupDragDetection(obj, dragType)
 		obj.InputBegan:Connect(function(input)
@@ -30769,6 +38749,7 @@ NAgui.addColorPicker = function(label, defaultColor, callback)
 				elseif dragType == "slider" then
 					draggingSlider = true
 				end
+				applyAutoRGBState(false)
 			end
 		end)
 	end
@@ -30785,7 +38766,7 @@ NAgui.addColorPicker = function(label, defaultColor, callback)
 		end
 	end)
 
-	SafeGetService("RunService").RenderStepped:Connect(function()
+	runService.RenderStepped:Connect(function(deltaTime)
 		if draggingMain then
 			local relX = math.clamp(mouse.X - main.AbsolutePosition.X, 0, main.AbsoluteSize.X)
 			local relY = math.clamp(mouse.Y - main.AbsolutePosition.Y, 0, main.AbsoluteSize.Y)
@@ -30798,35 +38779,213 @@ NAgui.addColorPicker = function(label, defaultColor, callback)
 			h = relX / slider.AbsoluteSize.X
 			updateUI(true)
 		end
+		if autoRGBEnabled and not draggingMain and not draggingSlider then
+			local step = math.clamp(deltaTime or 0.016, 0.001, 0.1)
+			h = (h + step * autoRGBSpeed) % 1
+			updateUI(true)
+		end
+	end)
+
+	local entry = {
+		get = function()
+			return Color3.fromHSV(h, s, v)
+		end;
+		set = function(color, opts)
+			if typeof(color) ~= "Color3" then return end
+			h, s, v = color:ToHSV()
+			updateUI(true, opts or {})
+		end;
+		getAutoRGB = function()
+			return autoRGBEnabled
+		end;
+		setAutoRGB = function(state)
+			applyAutoRGBState(state)
+		end;
+	}
+	NAgui._colorPickerRegistry[label] = entry
+
+	picker:GetPropertyChangedSignal("Parent"):Connect(function()
+		if not picker.Parent and NAgui._colorPickerRegistry[label] == entry then
+			NAgui._colorPickerRegistry[label] = nil
+		end
 	end)
 
 	updateUI(true)
+
+	return picker
+end
+
+NAgui.setColorPickerValue = function(label, color, opts)
+	local entry = NAgui._colorPickerRegistry and NAgui._colorPickerRegistry[label]
+	if not entry then return end
+	entry.set(color, opts or { fire = false })
+end
+
+NAgui.setColorPickerAutoRGB = function(label, enabled)
+	local entry = NAgui._colorPickerRegistry and NAgui._colorPickerRegistry[label]
+	if not entry or not entry.setAutoRGB then return end
+	entry.setAutoRGB(enabled)
+end
+
+NAgui.getColorPickerAutoRGB = function(label)
+	local entry = NAgui._colorPickerRegistry and NAgui._colorPickerRegistry[label]
+	if not entry or not entry.getAutoRGB then return nil end
+	return entry.getAutoRGB()
 end
 
 NAgui.addInput = function(label, placeholder, defaultText, callback)
 	local input = templates.Input:Clone()
+	local frame = input.InputFrame
+	local inputBox = frame.InputBox
+
 	input.Title.Text = label
-	input.InputFrame.InputBox.Text = defaultText or ""
-	input.InputFrame.InputBox.PlaceholderText = placeholder or ""
+	inputBox.Text = defaultText or ""
+	inputBox.PlaceholderText = placeholder or ""
 
 	input.LayoutOrder = NAgui._nextLayoutOrder()
 	input.Parent = NAUIMANAGER.SettingsList
 	NAmanage.registerElementForCurrentTab(input)
 
-	input.InputFrame.InputBox.FocusLost:Connect(function()
-		pcall(callback, input.InputFrame.InputBox.Text)
-	end)
-
-	input.InputFrame.InputBox:GetPropertyChangedSignal("Text"):Connect(function()
-		input.InputFrame:TweenSize(
-			UDim2.new(0, input.InputFrame.InputBox.TextBounds.X + 24, 0, 30),
+	local function resize()
+		frame:TweenSize(
+			UDim2.new(0, inputBox.TextBounds.X + 24, 0, 30),
 			Enum.EasingDirection.Out,
 			Enum.EasingStyle.Exponential,
 			0.2,
 			true
 		)
+	end
+
+	inputBox.FocusLost:Connect(function()
+		pcall(callback, inputBox.Text)
+	end)
+
+	inputBox:GetPropertyChangedSignal("Text"):Connect(resize)
+
+	local function setText(newValue, opts)
+		opts = opts or {}
+		local text = tostring(newValue or "")
+		if not opts.force and inputBox.Text == text then
+			if opts.fire then
+				pcall(callback, text)
+			end
+			return
+		end
+		inputBox.Text = text
+		if opts.fire then
+			pcall(callback, text)
+		end
+	end
+
+	local entry = {
+		input = input;
+		get = function()
+			return inputBox.Text
+		end;
+		set = function(value, opts)
+			setText(value, opts)
+		end;
+	}
+
+	NAgui._inputRegistry[label] = entry
+
+	input:GetPropertyChangedSignal("Parent"):Connect(function()
+		if not input.Parent and NAgui._inputRegistry[label] == entry then
+			NAgui._inputRegistry[label] = nil
+		end
+	end)
+
+	resize()
+
+	return input
+end
+
+NAgui.setInputValue = function(label, value, opts)
+	local entry = NAgui._inputRegistry and NAgui._inputRegistry[label]
+	if not entry then return end
+	entry.set(value, opts or { fire = false })
+end
+
+NAmanage.SyncPrefixUI = function(opts)
+	if not (NAgui and NAgui.setInputValue) then return end
+	local prefixValue = opt and tostring(opt.prefix or "") or ""
+	if prefixValue == "" then
+		prefixValue = ";"
+	end
+	opts = opts or {}
+	local setterOpts = {
+		force = opts.force ~= false,
+		fire = opts.fire == true,
+	}
+	NAgui.setInputValue("Prefix", prefixValue, setterOpts)
+end
+
+NAmanage._uiAutoSync = NAmanage._uiAutoSync or { toggles = {} }
+
+NAmanage.RegisterToggleAutoSync = function(label, getter, opts)
+	if type(label) ~= "string" or type(getter) ~= "function" then return end
+	local store = NAmanage._uiAutoSync
+	local entry = store.toggles[label]
+	if not entry then
+		entry = { getter = getter, last = nil, opts = opts }
+		store.toggles[label] = entry
+	else
+		entry.getter = getter
+		entry.opts = opts or entry.opts
+	end
+end
+
+NAmanage.RunUIAutoSync = function()
+	local store = NAmanage._uiAutoSync
+	if not store then return end
+	local toggleStore = store.toggles
+	if toggleStore and NAgui and NAgui.setToggleState then
+		for label, watcher in pairs(toggleStore) do
+			local success, rawValue = pcall(watcher.getter)
+			if success then
+				local normalized = nil
+				if watcher.opts and type(watcher.opts.normalize) == "function" then
+					local ok, result = pcall(watcher.opts.normalize, rawValue)
+					if ok then
+						normalized = result
+					end
+				end
+				if normalized == nil then
+					normalized = rawValue and true or false
+				end
+				local registry = NAgui._toggleRegistry
+				if registry and registry[label] then
+					if watcher.last == nil or watcher.last ~= normalized then
+						watcher.last = normalized
+						local fireCallback = watcher.opts and watcher.opts.fire == true
+						NAgui.setToggleState(label, normalized, {
+							force = true,
+							fire = fireCallback and true or false,
+						})
+					end
+				else
+					watcher.last = nil
+				end
+			end
+		end
+	end
+end
+
+NAmanage.StartUIAutoSyncLoop = function()
+	if NAmanage._uiAutoSyncLoopStarted then return end
+	NAmanage._uiAutoSyncLoopStarted = true
+	task.spawn(function()
+		while true do
+			task.wait(0.25)
+			local ok, err = pcall(NAmanage.RunUIAutoSync)
+			if not ok then
+				warn("[NA] UI auto-sync failed:", err)
+			end
+		end
 	end)
 end
+
+NAmanage.StartUIAutoSyncLoop()
 
 NAgui.addKeybind = function(label, defaultKey, callback)
 	local keybind = templates.Keybind:Clone()
@@ -30889,16 +39048,39 @@ NAgui.addSlider = function(label, min, max, defaultValue, increment, suffix, cal
 	local infoText = slider.Main.Information
 
 	local dragging = false
+	local currentValue = defaultValue
+	local step = tonumber(increment) or 0
+	local range = max - min
+
+	local function quantize(value)
+		if step == 0 then
+			return math.clamp(value, min, max)
+		end
+		local scaled = (value - min) / step
+		local rounded = math.floor(scaled + 0.5)
+		local quantized = min + rounded * step
+		if quantized < min then quantized = min end
+		if quantized > max then quantized = max end
+		return quantized
+	end
+
+	local function applyValue(value, opts)
+		opts = opts or {}
+		local quantized = quantize(value)
+		currentValue = quantized
+		local percent = (range ~= 0) and ((quantized - min) / range) or 0
+		progress.Size = UDim2.new(percent, 0, 1, 0)
+		infoText.Text = Format("%.14g", quantized)..(suffix or "")
+		if opts.fire ~= false then
+			pcall(callback, quantized)
+		end
+	end
 
 	local function updateSliderValueFromPos(x)
 		local relX = math.clamp(x - interact.AbsolutePosition.X, 0, interact.AbsoluteSize.X)
 		local percent = relX / interact.AbsoluteSize.X
-		local value = math.floor((min + (max - min) * percent) / increment + 0.5) * increment
-		value = math.clamp(value, min, max)
-
-		progress.Size = UDim2.new(percent, 0, 1, 0)
-		infoText.Text = Format("%.14g", value)..(suffix or "")
-		pcall(callback, value)
+		local value = min + range * percent
+		applyValue(value)
 	end
 
 	interact.InputBegan:Connect(function(input)
@@ -30919,9 +39101,31 @@ NAgui.addSlider = function(label, min, max, defaultValue, increment, suffix, cal
 		end
 	end)
 
-	local initialPercent = (defaultValue - min) / (max - min)
-	progress.Size = UDim2.new(initialPercent, 0, 1, 0)
-	infoText.Text = Format("%.14g", defaultValue)..(suffix or "")
+	applyValue(defaultValue, { fire = false })
+
+	local entry = {
+		get = function()
+			return currentValue
+		end;
+		set = function(value, opts)
+			applyValue(value, opts or {})
+		end;
+	}
+	NAgui._sliderRegistry[label] = entry
+
+	slider:GetPropertyChangedSignal("Parent"):Connect(function()
+		if not slider.Parent and NAgui._sliderRegistry[label] == entry then
+			NAgui._sliderRegistry[label] = nil
+		end
+	end)
+
+	return slider
+end
+
+NAgui.setSliderValue = function(label, value, opts)
+	local entry = NAgui._sliderRegistry and NAgui._sliderRegistry[label]
+	if not entry then return end
+	entry.set(value, opts or { fire = false })
 end
 
 NAmanage.Topbar_PlayTween=function(key,instance,info,props)
@@ -31021,32 +39225,27 @@ NAmanage.Topbar_PositionPanel=function()
 	end
 end
 
-NAmanage.Topbar_AnimateIcon=function(img,off,size)
-	local ti=TweenInfo.new(0.12,Enum.EasingStyle.Sine,Enum.EasingDirection.Out)
-	local ti2=TweenInfo.new(0.14,Enum.EasingStyle.Sine,Enum.EasingDirection.InOut)
-	NAmanage.Topbar_PlayTween("icon_shrink",TopBarApp.icon,ti,{Size=UDim2.new(0,0,0,0)}).Completed:Wait()
-	TopBarApp.icon.Image=img
-	if off then TopBarApp.icon.ImageRectOffset=off else TopBarApp.icon.ImageRectOffset=Vector2.new(0,0) end
-	if size then TopBarApp.icon.ImageRectSize=size else TopBarApp.icon.ImageRectSize=Vector2.new(0,0) end
-	NAmanage.Topbar_PlayTween("icon_grow",TopBarApp.icon,ti2,{Size=UDim2.new(0.8,0,0.8,0)})
+NAmanage.Topbar_AnimateIcon=function(iconText)
+	local ti=TweenInfo.new(0.1,Enum.EasingStyle.Sine,Enum.EasingDirection.Out)
+	local ti2=TweenInfo.new(0.1,Enum.EasingStyle.Sine,Enum.EasingDirection.InOut)
+	NAmanage.Topbar_PlayTween("icon_shrink",TopBarApp.icon,ti,{TextSize=0}).Completed:Wait()
+	TopBarApp.icon.Text=iconText or ""
+	TopBarApp.icon.TextSize=0
+	NAmanage.Topbar_PlayTween("icon_grow",TopBarApp.icon,ti2,{TextSize=24})
 end
 
 NAmanage.Topbar_UpdateToggleVisual=function(open)
-	local ti=TweenInfo.new(0.14,Enum.EasingStyle.Sine,Enum.EasingDirection.InOut)
+	local ti=TweenInfo.new(0.1,Enum.EasingStyle.Sine,Enum.EasingDirection.InOut)
 	local bgTarget=open and 0.06 or 0.12
 	local strokeT=open and 0.05 or 0.15
 	NAmanage.Topbar_PlayTween("tglass_bg",TopBarApp.tGlass,ti,{BackgroundTransparency=bgTarget})
 	if TopBarApp.tStroke then NAmanage.Topbar_PlayTween("tglass_stroke",TopBarApp.tStroke,ti,{Transparency=strokeT}) end
-	local CLOSED_IMG="rbxasset://LuaPackages/Packages/_Index/FoundationImages/FoundationImages/SpriteSheets/img_set_1x_6.png"
-	local CLOSED_OFF=Vector2.new(456,440)
-	local CLOSED_SIZE=Vector2.new(36,36)
-	local OPENED_IMG="rbxasset://LuaPackages/Packages/_Index/FoundationImages/FoundationImages/SpriteSheets/img_set_1x_5.png"
-	local OPENED_OFF=Vector2.new(436,258)
-	local OPENED_SIZE=Vector2.new(36,36)
+	local CLOSED_ICON="three-bars-horizontal"
+	local OPENED_ICON="twitter"
 	if open then
-		NAmanage.Topbar_AnimateIcon(OPENED_IMG,OPENED_OFF,OPENED_SIZE)
+		NAmanage.Topbar_AnimateIcon(OPENED_ICON)
 	else
-		NAmanage.Topbar_AnimateIcon(CLOSED_IMG,CLOSED_OFF,CLOSED_SIZE)
+		NAmanage.Topbar_AnimateIcon(CLOSED_ICON)
 	end
 end
 
@@ -31130,12 +39329,14 @@ NAmanage.Topbar_Rebuild=function()
 	local i=0
 	for _,def in ipairs(TopBarApp.buttonDefs) do
 		i+=1
-		local btn=InstanceNew("ImageButton",TopBarApp.scroll)
+		local btn=InstanceNew("TextButton",TopBarApp.scroll)
 		btn.Name=def.name.."Btn"
 		btn.Size=UDim2.new(0, TopBarApp.mode=="bottom" and tileBottom or tileSide, 0, TopBarApp.mode=="bottom" and tileBottom or tileSide)
 		btn.BackgroundTransparency=1
 		btn.BorderSizePixel=0
 		btn.LayoutOrder=i
+		btn.Text=''
+		btn.TextTransparency=1
 		local bg=InstanceNew("Frame",btn)
 		bg.ZIndex=203
 		bg.Size=UDim2.new(1,0,1,0)
@@ -31147,15 +39348,18 @@ NAmanage.Topbar_Rebuild=function()
 		stroke.Thickness=1
 		stroke.Color=NAUISTROKER or Color3.fromRGB(148,93,255)
 		stroke.Transparency=0.15
-		local ic=InstanceNew("ImageLabel",bg)
+		NAgui.RegisterColoredStroke(stroke)
+		local ic=InstanceNew("TextLabel",bg)
 		ic.ZIndex=204
 		ic.BackgroundTransparency=1
 		ic.Size=UDim2.new(0.65,0,0.65,0)
 		ic.Position=UDim2.new(0.5,0,0.5,0)
 		ic.AnchorPoint=Vector2.new(0.5,0.5)
-		ic.Image=def.image
-		if def.ImageRectOffset then ic.ImageRectOffset=def.ImageRectOffset end
-		if def.ImageRectSize then ic.ImageRectSize=def.ImageRectSize end
+		ic.FontFace=TopBarApp.icon.FontFace
+		ic.Text=def.icon or def.name or ""
+		ic.TextColor3=Color3.new(1,1,1)
+		ic.TextScaled=false
+		ic.TextSize=24
 		TopBarApp.childButtons[btn]=def.func
 		MouseButtonFix(btn,def.func)
 	end
@@ -31245,7 +39449,7 @@ NAmanage.Topbar_Init=function()
 	TopBarApp.frame.Position=UDim2.new(0,0,0,0)
 	TopBarApp.frame.BackgroundTransparency=1
 	TopBarApp.frame.Parent=TopBarApp.top
-	TopBarApp.toggle=InstanceNew("ImageButton",TopBarApp.frame)
+	TopBarApp.toggle=InstanceNew("TextButton",TopBarApp.frame)
 	TopBarApp.toggle.Name="TopbarToggle"
 	TopBarApp.toggle.Size=UDim2.new(0,42,0,42)
 	TopBarApp.toggle.Position=UDim2.new(0.5,0,0,10)
@@ -31254,6 +39458,8 @@ NAmanage.Topbar_Init=function()
 	TopBarApp.toggle.BorderSizePixel=0
 	TopBarApp.toggle.ClipsDescendants=false
 	TopBarApp.toggle.ZIndex=110
+	TopBarApp.toggle.Text=''
+	TopBarApp.toggle.TextTransparency=1
 	TopBarApp.tGlass=InstanceNew("Frame",TopBarApp.toggle)
 	TopBarApp.tGlass.Size=UDim2.new(1,0,1,0)
 	TopBarApp.tGlass.BackgroundColor3=Color3.fromRGB(20,20,24)
@@ -31264,16 +39470,17 @@ NAmanage.Topbar_Init=function()
 	TopBarApp.tStroke.Thickness=1.25
 	TopBarApp.tStroke.Color=NAUISTROKER or Color3.fromRGB(148,93,255)
 	TopBarApp.tStroke.Transparency=0.15
-	TopBarApp.icon=InstanceNew("ImageLabel",TopBarApp.toggle)
+	NAgui.RegisterColoredStroke(TopBarApp.tStroke)
+	TopBarApp.icon=InstanceNew("TextLabel",TopBarApp.toggle)
 	TopBarApp.icon.AnchorPoint=Vector2.new(0.5,0.5)
 	TopBarApp.icon.Position=UDim2.new(0.5,0,0.5,0)
 	TopBarApp.icon.Size=UDim2.new(0.8,0,0.8,0)
 	TopBarApp.icon.BackgroundTransparency=1
-	TopBarApp.icon.ScaleType=Enum.ScaleType.Fit
-	TopBarApp.icon.Image="rbxasset://LuaPackages/Packages/_Index/FoundationImages/FoundationImages/SpriteSheets/img_set_1x_6.png"
-	TopBarApp.icon.ImageRectOffset=Vector2.new(456,440)
-	TopBarApp.icon.ImageRectSize=Vector2.new(36,36)
 	TopBarApp.icon.ZIndex=112
+	TopBarApp.icon.FontFace=Font.new("rbxasset://LuaPackages/Packages/_Index/BuilderIcons/BuilderIcons/BuilderIcons.json",Enum.FontWeight.Bold,Enum.FontStyle.Normal)
+	TopBarApp.icon.TextColor3=Color3.new(1,1,1)
+	TopBarApp.icon.TextScaled=false
+	TopBarApp.icon.TextSize=24
 	TopBarApp.panel=InstanceNew("Frame",TopBarApp.top)
 	TopBarApp.panel.Visible=false
 	TopBarApp.panel.ClipsDescendants=true
@@ -31289,33 +39496,34 @@ NAmanage.Topbar_Init=function()
 	pStroke.Thickness=1
 	pStroke.Color=NAUISTROKER or Color3.fromRGB(148,93,255)
 	pStroke.Transparency=0.2
+	NAgui.RegisterColoredStroke(pStroke)
 	TopBarApp.buttonDefs={
-		{name="settings",image="rbxasset://LuaPackages/Packages/_Index/FoundationImages/FoundationImages/SpriteSheets/img_set_1x_8.png",ImageRectOffset=Vector2.new(416,464),ImageRectSize=Vector2.new(36,36),func=function()
+		{name="settings",icon="gear",func=function()
 			if NAUIMANAGER.SettingsFrame then
 				NAUIMANAGER.SettingsFrame.Visible=not NAUIMANAGER.SettingsFrame.Visible
 				NAmanage.centerFrame(NAUIMANAGER.SettingsFrame)
 			end
 		end},
-		{name="cmds",image="rbxasset://textures/ui/TopBar/moreOff@2x.png",func=NAgui.commands},
-		{name="chatlogs",image="rbxasset://textures/ui/Chat/ToggleChat@2x.png",func=function()
+		{name="cmds",icon="list-bulleted",func=NAgui.commands},
+		{name="chatlogs",icon="whatsapp",func=function()
 			if NAUIMANAGER.chatLogsFrame then
 				NAUIMANAGER.chatLogsFrame.Visible=not NAUIMANAGER.chatLogsFrame.Visible
 				NAmanage.centerFrame(NAUIMANAGER.chatLogsFrame)
 			end
 		end},
-		{name="console",image="rbxasset://textures/Icon_Stream_Off.png",func=function()
+		{name="console",icon="pencil-square",func=function()
 			if NAUIMANAGER.NAconsoleFrame then
 				NAUIMANAGER.NAconsoleFrame.Visible=not NAUIMANAGER.NAconsoleFrame.Visible
 				NAmanage.centerFrame(NAUIMANAGER.NAconsoleFrame)
 			end
 		end},
-		{name="waypp",image="rbxasset://textures/ui/waypoint.png",func=function()
+		{name="waypp",icon="location-pin",func=function()
 			if NAUIMANAGER.WaypointFrame then
 				NAUIMANAGER.WaypointFrame.Visible=not NAUIMANAGER.WaypointFrame.Visible
 				NAmanage.centerFrame(NAUIMANAGER.WaypointFrame)
 			end
 		end},
-		{name="bindd",image="rbxasset://textures/ui/PlayerList/developer@2x.png",func=function()
+		{name="bindd",icon="hammer-code",func=function()
 			if NAUIMANAGER.BindersFrame then
 				NAUIMANAGER.BindersFrame.Visible=not NAUIMANAGER.BindersFrame.Visible
 				NAmanage.centerFrame(NAUIMANAGER.BindersFrame)
@@ -31355,13 +39563,21 @@ NAgui.menu = function(menu)
 	local isAnimating = false
 	local sizeX = InstanceNew("IntValue", menu)
 	local sizeY = InstanceNew("IntValue", menu)
+	local function setMinAtt(value)
+		minimized = value
+		if menu and menu.SetAttribute then
+			menu:SetAttribute("NAMenuMinimized", value)
+		end
+	end
+	setMinAtt(false)
 
 	local function toggleMinimize()
 		if isAnimating then return end
-		minimized = not minimized
+		local nextState = not minimized
+		setMinAtt(nextState)
 		isAnimating = true
 
-		if minimized then
+		if nextState then
 			sizeX.Value = menu.Size.X.Offset
 			sizeY.Value = menu.Size.Y.Offset
 			NAgui.tween(menu, "Quart", "Out", 0.5, {Size = UDim2.new(0, sizeX.Value, 0, 35)})
@@ -31399,14 +39615,22 @@ NAgui.menuv2 = function(menu)
 	local isAnimating = false
 	local sizeX = InstanceNew("IntValue", menu)
 	local sizeY = InstanceNew("IntValue", menu)
+	local function setMinAtt(value)
+		minimized = value
+		if menu and menu.SetAttribute then
+			menu:SetAttribute("NAMenuMinimized", value)
+		end
+	end
+	setMinAtt(false)
 
 	local function toggleMinimize()
 		local success, err = NACaller(function()
 			if isAnimating then return end
-			minimized = not minimized
+			local nextState = not minimized
+			setMinAtt(nextState)
 			isAnimating = true
 
-			if minimized then
+			if nextState then
 				sizeX.Value = menu.Size.X.Offset
 				sizeY.Value = menu.Size.Y.Offset
 				NAgui.tween(menu, "Quart", "Out", 0.5, {
@@ -31463,6 +39687,12 @@ NAgui.menuv2 = function(menu)
 		end)
 	end
 
+	if translateButton and NAStuff.ChatTranslator then
+		NACaller(function()
+			NAStuff.ChatTranslator:registerButton(translateButton)
+		end)
+	end
+
 	NACaller(function()
 		NAgui.draggerV2(menu, menu.Topbar)
 	end)
@@ -31470,6 +39700,18 @@ NAgui.menuv2 = function(menu)
 	NACaller(function()
 		menu.Visible = false
 	end)
+end
+
+NAgui.menuv3 = function(menu)
+	if not menu then return end
+	NAgui.menuv2(menu)
+	local translator = NAStuff.ChatTranslator
+	local translateButton = menu:FindFirstChild("Translate", true)
+	local translateInput = menu:FindFirstChild("TranslateInput", true)
+
+	if translator then
+		translator:attachControls(translateButton, translateInput)
+	end
 end
 
 NAgui.hideFill = function()
@@ -31486,67 +39728,41 @@ NAgui.loadCMDS = function()
 			v:Destroy()
 		end
 	end
+	local layout = NAUIMANAGER.cmdAutofill and NAUIMANAGER.cmdAutofill:FindFirstChildOfClass("UIListLayout")
+	if layout then
+		layout.SortOrder = Enum.SortOrder.LayoutOrder
+	end
 	CMDAUTOFILL = {}
+	local names = {}
+	for name in pairs(cmds.Commands) do
+		Insert(names, name)
+	end
+	table.sort(names, function(a, b)
+		local la = a:lower()
+		local lb = b:lower()
+		if la == lb then
+			return a < b
+		end
+		return la < lb
+	end)
+
 	local i = 0
-	for name, cmdData in pairs(cmds.Commands) do
-		local usageText = "Unknown"
-		local info = cmdData[2]
-		if type(info) == "table" and #info >= 1 then
-			usageText = info[1] or ""
-			usageText = usageText:gsub("^%s+", ""):gsub("%s+$", "")
-			local lowerName = Lower(name)
-			if usageText == "" or not Lower(usageText):find(lowerName, 1, true) then
-				local firstWord, rest = usageText:match("^(%S+)(.*)")
-				if rest and #rest > 0 then
-					if rest:match("^%s*%(") then
-						usageText = name..rest
-					else
-						usageText = name.." "..rest:gsub("^%s+", "")
-					end
-				else
-					usageText = name
-				end
+	for _, name in ipairs(names) do
+		local cmdData = cmds.Commands[name]
+		local displayText = fixStupidSearchGoober(name, cmdData)
+		if displayText and displayText ~= "" then
+			if type(cmdData[2]) == "table" then
+				cmdData[2][1] = displayText
 			end
-
-			local aliasMap = {}
-			local prefix, aliasBlock = usageText:match("^(.-)%s*%(([^()]*)%)%s*$")
-			if aliasBlock then
-				usageText = prefix:gsub("%s+$", "")
-				for alias in aliasBlock:gmatch("[^,%s]+") do
-					local lowerAlias = Lower(alias)
-					if lowerAlias ~= lowerName and not aliasMap[lowerAlias] then
-						aliasMap[lowerAlias] = alias
-					end
-				end
-			else
-				usageText = usageText:gsub("%s+$", "")
-			end
-
-			for alias, aliasCmdData in pairs(cmds.Aliases) do
-				if aliasCmdData == cmdData then
-					local lowerAlias = Lower(alias)
-					if lowerAlias ~= lowerName and not aliasMap[lowerAlias] then
-						aliasMap[lowerAlias] = alias
-					end
-				end
-			end
-
-			local aliasList = {}
-			for _, display in pairs(aliasMap) do
-				Insert(aliasList, display)
-			end
-			table.sort(aliasList, function(a, b)
-				return Lower(a) < Lower(b)
-			end)
-			if #aliasList > 0 then
-				usageText = usageText.." ("..Concat(aliasList, ", ")..")"
-			end
+		else
+			displayText = (type(cmdData[2]) == "table" and cmdData[2][1]) or name
 		end
 		local btn = NAUIMANAGER.cmdExample:Clone()
 		btn.Parent = NAUIMANAGER.cmdAutofill
 		btn.Name = name
-		btn.Input.Text = usageText
+		btn.Input.Text = displayText
 		i += 1
+		btn.LayoutOrder = i
 		Insert(CMDAUTOFILL, btn)
 	end
 	cmdNAnum = i
@@ -31568,6 +39784,7 @@ end)
 
 NAgui.barSelect = function(speed)
 	speed = speed or 0.4
+	shouldShowDefaultAutofill = true
 
 	NAUIMANAGER.centerBar.Size = UDim2.new(0, 0, 0, 0)
 
@@ -31593,6 +39810,8 @@ end
 
 NAgui.barDeselect = function(speed)
 	speed = speed or 0.4
+
+	shouldShowDefaultAutofill = false
 
 	NAgui.tween(NAUIMANAGER.centerBar, "Back", "InOut", speed, {
 		Size = UDim2.new(0, 0, 0, 0)
@@ -31694,7 +39913,50 @@ NAmanage.performSearch=function(term)
 	for _,f in ipairs(prevVisible) do f.Visible = false end
 	table.clear(prevVisible)
 	table.clear(results)
-	if Match(term,"%s") or term == "" then
+	local function revealFrame(frame,index)
+		if not frame then return end
+		Insert(prevVisible,frame)
+		frame.Visible=true
+		local w=math.sqrt(index)*125
+		local y=(index-1)*28
+		local pos=UDim2.new(0.5,w,0,y)
+		local size=UDim2.new(0.5,w,0,25)
+		if canTween then
+			NAgui.tween(frame,"Quint","Out",0.2,{Size=size,Position=pos})
+		else
+			frame.Size=size
+			frame.Position=pos
+		end
+	end
+	if term == "" or Match(term,"^%s*$") then
+		predictionInput.Text = ""
+		if shouldShowDefaultAutofill then
+			shouldShowDefaultAutofill = false
+			local displayed = 0
+			for _, cmdName in ipairs(defaultBarCommands) do
+				if displayed >= 5 then
+					break
+				end
+				local target = Lower(cmdName)
+				for _, entry in ipairs(searchIndex) do
+					if NAmanage.defaultCommandMatches(entry, target) then
+						displayed += 1
+						revealFrame(entry.frame, displayed)
+						break
+					end
+				end
+			end
+		else
+			for i=1,math.min(5,#searchIndex) do
+				local entry=searchIndex[i]
+				if entry then
+					revealFrame(entry.frame,i)
+				end
+			end
+		end
+		return
+	end
+	if Match(term,"%s") then
 		predictionInput.Text = ""
 		return
 	end
@@ -31712,19 +39974,7 @@ NAmanage.performSearch=function(term)
 	predictionInput.Text = (results[1] and results[1].text) or ""
 	for i=1,math.min(5,#results)do
 		local r=results[i]
-		local f=r.frame
-		Insert(prevVisible,f)
-		f.Visible=true
-		local w=math.sqrt(i)*125
-		local y=(i-1)*28
-		local pos=UDim2.new(0.5,w,0,y)
-		local size=UDim2.new(0.5,w,0,25)
-		if canTween then
-			NAgui.tween(f,"Quint","Out",0.2,{Size=size,Position=pos})
-		else
-			f.Size=size
-			f.Position=pos
-		end
+		revealFrame(r.frame,i)
 	end
 end
 
@@ -31732,7 +39982,9 @@ NAgui.searchCommands = function()
 	if NAlib.isConnected("SearchInput") then NAlib.disconnect("SearchInput") end
 	NAlib.connect("SearchInput",NAUIMANAGER.cmdInput:GetPropertyChangedSignal("Text"):Connect(function()
 		local cleaned = Lower(GSub(NAUIMANAGER.cmdInput.Text,";",""))
-		if cleaned==lastSearchText then return end
+		shouldShowDefaultAutofill = cleaned == ""
+		local isBlank = cleaned == "" or cleaned:match("^%s*$")
+		if cleaned==lastSearchText and not isBlank then return end
 		lastSearchText=cleaned
 		gen+=1
 		local thisGen=gen
@@ -31745,6 +39997,21 @@ end
 
 NAgui.loadCMDS()
 NAgui.searchCommands()
+
+NAgui.autoFILLLL=function()
+	if not NAUIMANAGER.cmdInput then return end
+	local current = NAUIMANAGER.cmdInput.Text or ""
+	local cleaned = Lower(GSub(current, ";", ""))
+	lastSearchText = cleaned
+	gen += 1
+	NAmanage.performSearch(cleaned)
+end
+
+if NAUIMANAGER.cmdInput then
+	NAUIMANAGER.cmdInput.Focused:Connect(function()
+		Delay(0, NAgui.autoFILLLL)
+	end)
+end
 
 --[[ OPEN THE COMMAND BAR ]]--
 --[[mouse.KeyDown:Connect(function(k)
@@ -31822,7 +40089,7 @@ end)
 NAgui.barDeselect(0)
 NAUIMANAGER.cmdBar.Visible=true
 if NAUIMANAGER.chatLogsFrame then
-	NAgui.menuv2(NAUIMANAGER.chatLogsFrame)
+	NAgui.menuv3(NAUIMANAGER.chatLogsFrame)
 end
 
 if NAUIMANAGER.NAconsoleFrame then
@@ -31855,67 +40122,567 @@ if NAUIMANAGER.WaypointFrame then NAgui.resizeable(NAUIMANAGER.WaypointFrame) en
 if NAUIMANAGER.BindersFrame then NAgui.resizeable(NAUIMANAGER.BindersFrame) end
 
 --[[ CMDS COMMANDS SEARCH FUNCTION ]]--
-NAUIMANAGER.commandsFilter:GetPropertyChangedSignal("Text"):Connect(function()
-	local searchText = Lower(GSub(NAUIMANAGER.commandsFilter.Text, ";", ""))
+NAgui.normalizeCommandFilter=function(text)
+	text = text or ""
+	return Lower(GSub(text, ";", ""))
+end
 
+NAgui.sanitizeCommandInfo=function(info)
+	local searchableInfo = Lower(info or "")
+	searchableInfo = GSub(searchableInfo, "<[^>]+>", "")
+	searchableInfo = GSub(searchableInfo, "%[[^%]]+%]", "")
+	searchableInfo = GSub(searchableInfo, "%([^%)]+%)", "")
+	searchableInfo = GSub(searchableInfo, "{[^}]+}", "")
+	searchableInfo = GSub(searchableInfo, "【[^】]+】", "")
+	searchableInfo = GSub(searchableInfo, "〖[^〗]+〗", "")
+	searchableInfo = GSub(searchableInfo, "«[^»]+»", "")
+	searchableInfo = GSub(searchableInfo, "‹[^›]+›", "")
+	searchableInfo = GSub(searchableInfo, "「[^」]+」", "")
+	searchableInfo = GSub(searchableInfo, "『[^』]+』", "")
+	searchableInfo = GSub(searchableInfo, "（[^）]+）", "")
+	searchableInfo = GSub(searchableInfo, "〔[^〕]+〕", "")
+	searchableInfo = GSub(searchableInfo, "‖[^‖]+‖", "")
+	searchableInfo = GSub(searchableInfo, "%s+", " ")
+	searchableInfo = GSub(searchableInfo, "^%s*(.-)%s*$", "%1")
+	return searchableInfo
+end
+
+NAgui.filterCommandList = function(rawText)
+	if not NAUIMANAGER.commandsList then return end
+	local searchText = NAgui.normalizeCommandFilter(rawText)
 	for _, label in ipairs(NAUIMANAGER.commandsList:GetChildren()) do
 		if label:IsA("TextLabel") then
-			local cmdName = Lower(label.Name)
+			local cmdName = Lower(label.Name or "")
 			local command = cmds.Commands[cmdName]
-			local displayInfo = command and command[2] and command[2][1] or ""
-			local updatedText, extraAliases = fixStupidSearchGoober(cmdName, command)
-
-			local searchableInfo = Lower(displayInfo)
-			searchableInfo = GSub(searchableInfo, "<[^>]+>", "")
-			searchableInfo = GSub(searchableInfo, "%[[^%]]+%]", "")
-			searchableInfo = GSub(searchableInfo, "%([^%)]+%)", "")
-			searchableInfo = GSub(searchableInfo, "{[^}]+}", "")
-			searchableInfo = GSub(searchableInfo, "【[^】]+】", "")
-			searchableInfo = GSub(searchableInfo, "〖[^〗]+〗", "")
-			searchableInfo = GSub(searchableInfo, "«[^»]+»", "")
-			searchableInfo = GSub(searchableInfo, "‹[^›]+›", "")
-			searchableInfo = GSub(searchableInfo, "「[^」]+」", "")
-			searchableInfo = GSub(searchableInfo, "『[^』]+』", "")
-			searchableInfo = GSub(searchableInfo, "（[^）]+）", "")
-			searchableInfo = GSub(searchableInfo, "〔[^〕]+〕", "")
-			searchableInfo = GSub(searchableInfo, "‖[^‖]+‖", "")
-			searchableInfo = GSub(searchableInfo, "%s+", " ")
-			searchableInfo = GSub(searchableInfo, "^%s*(.-)%s*$", "%1")
-
-			local extraAliases = {}
-			local baseFunc = command and command[1]
-			for alias, aliasData in pairs(cmds.Aliases) do
-				if aliasData[1] == baseFunc then
-					Insert(extraAliases, Lower(alias))
+			if command then
+				local updatedText, aliasList = fixStupidSearchGoober(cmdName, command)
+				local displayText = updatedText
+				if not displayText or displayText == "" then
+					displayText = (type(command[2]) == "table" and command[2][1]) or cmdName
 				end
-			end
-
-			if #extraAliases > 0 and not Find(updatedText, "%b()") then
-				updatedText = updatedText.." ("..Concat(extraAliases, ", ")..")"
-			end
-
-			local matches = false
-
-			if Sub(cmdName, 1, #searchText) == searchText then
-				matches = true
-			elseif Find(searchableInfo, searchText, 1, true) then
-				matches = true
-			else
-				for _, alias in ipairs(extraAliases) do
-					if Sub(alias, 1, #searchText) == searchText or Find(alias, searchText, 1, true) then
+				if type(command[2]) == "table" then
+					command[2][1] = displayText
+				end
+				aliasList = aliasList or {}
+				for i = 1, #aliasList do
+					aliasList[i] = Lower(aliasList[i])
+				end
+				local sanitizedInfo = NAgui.sanitizeCommandInfo(displayText)
+				local matches
+				if searchText == "" then
+					matches = true
+				else
+					if Sub(cmdName, 1, #searchText) == searchText then
 						matches = true
-						break
+					elseif Find(sanitizedInfo, searchText, 1, true) then
+						matches = true
+					else
+						for _, alias in ipairs(aliasList) do
+							if Sub(alias, 1, #searchText) == searchText or Find(alias, searchText, 1, true) then
+								matches = true
+								break
+							end
+						end
 					end
 				end
-			end
-
-			label.Visible = matches
-			if matches then
-				label.Text = updatedText
+				label.Visible = matches and true or false
+				if matches then
+					label.Text = " "..displayText
+				end
+			else
+				label.Visible = searchText == ""
 			end
 		end
 	end
+end
+
+NAUIMANAGER.commandsFilter:GetPropertyChangedSignal("Text"):Connect(function()
+	NAgui.filterCommandList(NAUIMANAGER.commandsFilter.Text)
 end)
+
+do
+	local Http = HttpService
+	local translator = NAStuff.ChatTranslator or {}
+	NAStuff.ChatTranslator = translator
+
+	translator.messages = translator.messages or {}
+	translator.enabled = opt.chatTranslateEnabled ~= false
+	opt.chatTranslateEnabled = translator.enabled
+
+	local function toIso(value)
+		if not value then return nil end
+		return tostring(value):lower()
+	end
+
+	local languages = {
+		auto="Automatic",af="Afrikaans",sq="Albanian",am="Amharic",ar="Arabic",hy="Armenian",az="Azerbaijani",eu="Basque",be="Belarusian",bn="Bengali",bs="Bosnian",bg="Bulgarian",ca="Catalan",ceb="Cebuano",ny="Chichewa",
+		["zh-cn"]="Chinese Simplified",["zh-tw"]="Chinese Traditional",co="Corsican",hr="Croatian",cs="Czech",da="Danish",nl="Dutch",en="English",eo="Esperanto",et="Estonian",tl="Filipino",fi="Finnish",fr="French",fy="Frisian",
+		gl="Galician",ka="Georgian",de="German",el="Greek",gu="Gujarati",ht="Haitian Creole",ha="Hausa",haw="Hawaiian",iw="Hebrew",he="Hebrew",hi="Hindi",hmn="Hmong",hu="Hungarian",is="Icelandic",ig="Igbo",id="Indonesian",ga="Irish",it="Italian",
+		ja="Japanese",jw="Javanese",kn="Kannada",kk="Kazakh",km="Khmer",ko="Korean",ku="Kurdish (Kurmanji)",ky="Kyrgyz",lo="Lao",la="Latin",lv="Latvian",lt="Lithuanian",lb="Luxembourgish",mk="Macedonian",mg="Malagasy",ms="Malay",
+		ml="Malayalam",mt="Maltese",mi="Maori",mr="Marathi",mn="Mongolian",my="Myanmar (Burmese)",ne="Nepali",no="Norwegian",ps="Pashto",fa="Persian",pl="Polish",pt="Portuguese",pa="Punjabi",ro="Romanian",ru="Russian",sm="Samoan",
+		gd="Scots Gaelic",sr="Serbian",st="Sesotho",sn="Shona",sd="Sindhi",si="Sinhala",sk="Slovak",sl="Slovenian",so="Somali",es="Spanish",su="Sundanese",sw="Swahili",sv="Swedish",tg="Tajik",ta="Tamil",te="Telugu",th="Thai",tr="Turkish",
+		uk="Ukrainian",ur="Urdu",uz="Uzbek",vi="Vietnamese",cy="Welsh",xh="Xhosa",yi="Yiddish",yo="Yoruba",zu="Zulu"
+	}
+
+	local function iso(value)
+		local lowered = toIso(value)
+		if not lowered then
+			return nil
+		end
+		if languages[lowered] then
+			return lowered
+		end
+		for code, name in pairs(languages) do
+			if type(name) == "string" and name:lower() == lowered then
+				return code
+			end
+		end
+		return nil
+	end
+
+	local function languageName(code)
+		return languages[code] or code
+	end
+
+	translator.target = iso(opt.chatTranslateTarget) or translator.target or "en"
+	opt.chatTranslateTarget = translator.target
+
+	translator._state = translator._state or {
+		gv = (isfile and isfile("googlev.txt") and readfile("googlev.txt")) or "";
+		fsid = nil;
+		bl = nil;
+		rid = math.random(1000, 9999);
+	}
+
+	local state = translator._state
+	local root = "https://translate.google.com/"
+	local exec = "https://translate.google.com/_/TranslateWebserverUi/data/batchexecute"
+	local rpc = "MkEWBc"
+
+	local function requestAsync(optArgs)
+		local fn = opt.NAREQUEST
+		if fn then
+			local ok, res = pcall(fn, optArgs)
+			if ok and res then
+				return res
+			end
+		end
+		local ok2, res2 = pcall(function()
+			return Http:RequestAsync(optArgs)
+		end)
+		if ok2 and res2 then
+			return res2
+		end
+		return nil
+	end
+
+	local function handleConsent(body)
+		local tokens = {}
+		for tag in body:gmatch('<input type="hidden" name=".-" value=".-">') do
+			local k, v = tag:match('<input type="hidden" name="(.-)" value="(.-)">')
+			if k and v then
+				tokens[k] = v
+			end
+		end
+		state.gv = tokens.v or state.gv or ""
+		if writefile then
+			pcall(writefile, "googlev.txt", state.gv)
+		end
+	end
+
+	local function fetch(url, method, body)
+		local res = requestAsync({
+			Url = url;
+			Method = method or "GET";
+			Headers = { cookie = "CONSENT=YES+"..(state.gv or "") };
+			Body = body;
+		})
+		if not res then
+			return nil
+		end
+		local b = res.Body or res.body or ""
+		if type(b) ~= "string" then
+			b = tostring(b)
+		end
+		if b:find("https://consent.google.com/s") then
+			handleConsent(b)
+			res = requestAsync({
+				Url = url;
+				Method = "GET";
+				Headers = { cookie = "CONSENT=YES+"..(state.gv or "") };
+			})
+			if not res then
+				return nil
+			end
+		end
+		return res
+	end
+
+	local function ensureSession()
+		if state.fsid and state.bl then
+			return true
+		end
+		local res = fetch(root)
+		if not res then
+			return false
+		end
+		local body = res.Body or res.body or ""
+		if type(body) ~= "string" then
+			body = tostring(body)
+		end
+		state.fsid = body:match('"FdrFJe":"(.-)"')
+		state.bl = body:match('"cfb2h":"(.-)"')
+		return state.fsid ~= nil and state.bl ~= nil
+	end
+
+	local function encodeQuery(data)
+		local s = ""
+		for k, v in pairs(data) do
+			if type(v) == "table" then
+				for _, vv in pairs(v) do
+					s ..= "&"..Http:UrlEncode(k).."="..Http:UrlEncode(vv)
+				end
+			else
+				s ..= "&"..Http:UrlEncode(k).."="..Http:UrlEncode(v)
+			end
+		end
+		return s:sub(2)
+	end
+
+	local jsonEncode = function(x) return Http:JSONEncode(x) end
+	local jsonDecode = function(x) return Http:JSONDecode(x) end
+
+	local function translateSimple(text, target, source)
+		target = iso(target) or "en"
+		source = iso(source) or "auto"
+		local url = ("https://translate.googleapis.com/translate_a/single?client=gtx&sl=%s&tl=%s&dt=t&q=%s")
+			:format(Http:UrlEncode(source), Http:UrlEncode(target), Http:UrlEncode(text))
+		local res = requestAsync({Url = url, Method = "GET"})
+		if not res then return nil end
+		local body = res.Body or res.body or ""
+		local ok, data = pcall(function()
+			return Http:JSONDecode(body)
+		end)
+		if not ok or type(data) ~= "table" then
+			return nil
+		end
+		local segments = data[1]
+		local detected = data[3]
+		local parts = {}
+		if type(segments) == "table" then
+			for _, seg in ipairs(segments) do
+				if type(seg) == "table" and type(seg[1]) == "string" then
+					Insert(parts, seg[1])
+				end
+			end
+		end
+		local translated = Concat(parts, "")
+		if translated == "" then
+			translated = nil
+		end
+		return translated, detected
+	end
+
+	local function translatePayload(text, target, source)
+		if not text or text == "" then
+			return nil
+		end
+		local translated, detected = translateSimple(text, target, source)
+		if translated and translated ~= "" then
+			return translated, detected
+		end
+		if not ensureSession() then
+			return translated, detected
+		end
+		state.rid += 10000
+		target = iso(target) or "en"
+		source = iso(source) or "auto"
+		local data = { { text, source, target, true }, { nil } }
+		local freq = { { { rpc, jsonEncode(data), nil, "generic" } } }
+		local url = exec.."?"..encodeQuery({
+			rpcids = rpc;
+			["f.sid"] = state.fsid;
+			bl = state.bl;
+			hl = "en";
+			_reqid = state.rid - 10000;
+			rt = "c";
+		})
+		local body = encodeQuery({ ["f.req"] = jsonEncode(freq) })
+		local res = fetch(url, "POST", body)
+		if not res then
+			return translated, detected
+		end
+		local raw = res.Body or res.body or ""
+		if type(raw) ~= "string" then
+			raw = tostring(raw)
+		end
+		local ok, parsed = pcall(function()
+			local arr = jsonDecode(raw:match("%[.-%]\n"))
+			return jsonDecode(arr[1][3])
+		end)
+		if not ok or type(parsed) ~= "table" then
+			return translated, detected
+		end
+		local fallTranslated = nil
+		pcall(function()
+			fallTranslated = parsed[2][1][1][6][1][1]
+		end)
+		if type(fallTranslated) ~= "string" or fallTranslated == "" then
+			return translated, detected
+		end
+		local detectedLang = parsed[3]
+		return fallTranslated, detectedLang or detected
+	end
+
+	local function resizeLabel(label)
+		if not (label and label.Parent and NAgui and NAgui.txtSize) then
+			return
+		end
+		local ok, size = pcall(NAgui.txtSize, label, label.AbsoluteSize.X, 200)
+		if ok and size then
+			label.Size = UDim2.new(1, -5, 0, size.Y)
+		end
+	end
+
+	function translator:isEnabled()
+		return self.enabled == true
+	end
+
+	function translator:updateUI()
+		if self.button then
+			if self:isEnabled() then
+				self.button.Text = "TR: "..string.upper(self.target or "EN")
+				self.button.BackgroundColor3 = Color3.fromRGB(68, 108, 68)
+				self.button.TextColor3 = Color3.fromRGB(234, 234, 244)
+			else
+				self.button.Text = "TR: OFF"
+				self.button.BackgroundColor3 = Color3.fromRGB(54, 54, 64)
+				self.button.TextColor3 = Color3.fromRGB(178, 178, 188)
+			end
+		end
+		if self.input and not self.input:IsFocused() then
+			self.input.Text = string.upper(self.target or "EN")
+		end
+	end
+
+	function translator:updateAllMessages()
+		for _, info in pairs(self.messages) do
+			if self:isEnabled() then
+				self:ensureTranslation(info)
+			end
+			self:applyDisplay(info)
+		end
+	end
+
+	function translator:setEnabled(state)
+		local newState = state and true or false
+		if self.enabled == newState then
+			self.enabled = newState
+			self:updateUI()
+			return
+		end
+		self.enabled = newState
+		opt.chatTranslateEnabled = newState
+		pcall(NAmanage.NASettingsSet, "chatTranslate", newState)
+		self:updateUI()
+		self:updateAllMessages()
+	end
+
+	function translator:toggle()
+		self:setEnabled(not self:isEnabled())
+		return self.enabled
+	end
+
+	function translator:applyDisplay(info)
+		if not info or not info.label then return end
+		local label = info.label
+		if not (label and label.Parent) then
+			self.messages[label] = nil
+			return
+		end
+		local text = info.base or ""
+		if self:isEnabled() and info.translationLine then
+			text = text.."\n"..info.translationLine
+		end
+		label.Text = text
+		resizeLabel(label)
+	end
+
+	function translator:ensureTranslation(info)
+		if not info or info.translating then
+			return
+		end
+		if info.translationLine and info.target == self.target then
+			return
+		end
+		if not info.message or info.message == "" then
+			return
+		end
+		info.translating = true
+		info.target = self.target
+		Spawn(function()
+			local ok, translated, detected = pcall(translatePayload, info.message, self.target, "auto")
+			info.translating = false
+			if not ok then
+				info.translationLine = nil
+				self:applyDisplay(info)
+				return
+			end
+			if not translated or translated == "" then
+				info.translationLine = nil
+				self:applyDisplay(info)
+				return
+			end
+			local code = iso(detected) or detected or "AUTO"
+			local tag = tostring(code):upper()
+			info.translationLine = ("[%s] %s"):format(self.target:upper(), translated)
+			info.detected = tag
+			self:applyDisplay(info)
+		end)
+	end
+
+	function translator:registerMessage(label, baseText, rawMessage)
+		if not label then return end
+		local info = self.messages[label]
+		if not info then
+			info = {
+				label = label;
+				base = baseText or "";
+				message = rawMessage or "";
+				translationLine = nil;
+				translating = false;
+				target = nil;
+			}
+			self.messages[label] = info
+			if label.Destroying then
+				label.Destroying:Connect(function()
+					self.messages[label] = nil
+				end)
+			end
+			label.AncestryChanged:Connect(function(_, parent)
+				if not parent then
+					self.messages[label] = nil
+				end
+			end)
+		else
+			info.base = baseText or info.base
+			info.message = rawMessage or info.message
+			info.translationLine = nil
+			info.target = nil
+		end
+
+		self:applyDisplay(info)
+		self:ensureTranslation(info)
+	end
+
+	function translator:setTarget(lang)
+		local code = iso(lang)
+		if not code then
+			return false
+		end
+		if self.target == code then
+			self:updateUI()
+			return true, code, languageName(code)
+		end
+		self.target = code
+		opt.chatTranslateTarget = code
+		pcall(NAmanage.NASettingsSet, "chatTranslateTarget", code)
+		for _, info in pairs(self.messages) do
+			info.translationLine = nil
+			info.target = nil
+			info.translating = false
+			self:applyDisplay(info)
+			self:ensureTranslation(info)
+		end
+		self:updateUI()
+		return true, code, languageName(code)
+	end
+
+	function translator:attachControls(button, input)
+		if button and self.button ~= button then
+			self.button = button
+			MouseButtonFix(button, function()
+				local nowEnabled = self:toggle()
+				self:updateUI()
+				DebugNotif("Chat translation "..(nowEnabled and "enabled" or "disabled"), 2)
+			end)
+		end
+		if input and self.input ~= input then
+			if self._inputConn then
+				self._inputConn:Disconnect()
+				self._inputConn = nil
+			end
+			self.input = input
+			input.PlaceholderText = "Lang"
+			input.ClearTextOnFocus = false
+			self._inputConn = input.FocusLost:Connect(function(enterPressed)
+				local text = input.Text or ""
+				text = text:match("^%s*(.-)%s*$") or ""
+				if text == "" then
+					self:updateUI()
+					return
+				end
+				local ok, code, name = self:setTarget(text)
+				if not ok then
+					DoNotif("Invalid language code. Example: en, bg, ja", 1.5)
+				else
+					DoNotif(("Chat translator target set to %s (%s)"):format(code:upper(), name), 1.5)
+				end
+				self:updateUI()
+				if enterPressed then
+					input:ReleaseFocus()
+				end
+			end)
+		end
+		self:updateUI()
+	end
+
+	function translator:tryAttach()
+		local frame = NAUIMANAGER and NAUIMANAGER.chatLogsFrame
+		if not frame then return end
+		local button = frame:FindFirstChild("Translate", true)
+		local input = frame:FindFirstChild("TranslateInput", true)
+		if button or input then
+			self:attachControls(button, input)
+		end
+	end
+
+	function translator:showLanguages()
+		local entries = {}
+		for code, name in pairs(languages) do
+			if code ~= "auto" then
+				Insert(entries, { code, name })
+			end
+		end
+		table.sort(entries, function(a, b)
+			return a[1] < b[1]
+		end)
+		local lines = {}
+		for _, info in ipairs(entries) do
+			Insert(lines, info[1]:upper().." - "..info[2])
+		end
+		local text = Concat(lines, "\n")
+		if typeof(DoWindow) == "function" then
+			DoWindow("Supported chat translator languages:\n\n"..text)
+		else
+			print("[ChatTranslator languages]\n"..text)
+			DoNotif("Supported languages printed to console output.", 4)
+		end
+	end
+
+	translator:tryAttach()
+	if NAStuff.NASCREENGUI and not translator._hookedWatcher then
+		translator._hookedWatcher = true
+		NAStuff.NASCREENGUI.DescendantAdded:Connect(function(inst)
+			if inst and (inst.Name == "Translate" or inst.Name == "TranslateInput") then
+				Defer(function()
+					translator:tryAttach()
+				end)
+			end
+		end)
+	end
+	translator:updateUI()
+end
 
 --[[ CHAT TO USE COMMANDS ]]--
 function bindToChat(plr, msg)
@@ -31944,11 +40711,13 @@ function bindToChat(plr, msg)
 	end
 
 	local currentTime = os.date("%Y-%m-%d %H:%M:%S")
+	local baseText
 	if displayName == userName then
-		chatMsg.Text = ("@%s: %s"):format(userName, msg)
+		baseText = ("@%s: %s"):format(userName, msg)
 	else
-		chatMsg.Text = ("%s [@%s]: %s"):format(displayName, userName, msg)
+		baseText = ("%s [@%s]: %s"):format(displayName, userName, msg)
 	end
+	chatMsg.Text = baseText
 
 	if isNAadmin then
 		local function rainbowColor()
@@ -31969,6 +40738,11 @@ function bindToChat(plr, msg)
 		elseif LocalPlayer:IsFriendsWith(plr.UserId) then
 			chatMsg.TextColor3 = Color3.fromRGB(255, 255, 0)
 		end
+	end
+
+	local translator = NAStuff.ChatTranslator
+	if translator then
+		translator:registerMessage(chatMsg, baseText, msg)
 	end
 
 	pcall(function()
@@ -32016,7 +40790,28 @@ NAmanage.bindToDevConsole = function()
 	if not NAUIMANAGER.NAconsoleLogs or not NAUIMANAGER.NAconsoleExample then return end
 
 	local activeLogs, pool, pending = {}, {}, {}
-	local toggles = { Output = true, Info = true, Warn = true, Error = true }
+	local buttonTypes = { "Output", "Info", "Warn", "Error" }
+	local savedFilters
+	if NAmanage and NAmanage.NASettingsGet then
+		local ok, result = pcall(function()
+			return NAmanage.NASettingsGet("devConsoleFilters")
+		end)
+		if ok and type(result) == "table" then
+			savedFilters = result
+		end
+	end
+	local toggles = {}
+	for _, logType in ipairs(buttonTypes) do
+		local savedValue = savedFilters and savedFilters[logType]
+		if type(savedValue) == "boolean" then
+			toggles[logType] = savedValue
+		else
+			toggles[logType] = true
+		end
+	end
+
+	local SELECTED_COLOR = Color3.fromRGB(0, 255, 0)
+	local DESELECTED_COLOR = Color3.fromRGB(255, 255, 255)
 
 	local FilterButtons = InstanceNew("Frame")
 	FilterButtons.Name = "FilterButtons"
@@ -32033,7 +40828,6 @@ NAmanage.bindToDevConsole = function()
 	layout.Padding = UDim.new(0, 6)
 	layout.Parent = FilterButtons
 
-	local buttonTypes = { "Output", "Info", "Warn", "Error" }
 	for _, logType in ipairs(buttonTypes) do
 		local btnContainer = InstanceNew("Frame")
 		btnContainer.Name = logType
@@ -32050,7 +40844,7 @@ NAmanage.bindToDevConsole = function()
 		checkbox.Size = UDim2.new(0, 18, 0, 18)
 		checkbox.Position = UDim2.new(0, 5, 0.5, 0)
 		checkbox.AnchorPoint = Vector2.new(0, 0.5)
-		checkbox.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+		checkbox.BackgroundColor3 = toggles[logType] and SELECTED_COLOR or DESELECTED_COLOR
 		checkbox.BorderSizePixel = 0
 		checkbox.Parent = btnContainer
 
@@ -32079,7 +40873,22 @@ NAmanage.bindToDevConsole = function()
 
 		MouseButtonFix(clickZone, function()
 			toggles[logType] = not toggles[logType]
-			local targetColor = toggles[logType] and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 255, 255)
+
+			if NAmanage and NAmanage.NASettingsSet then
+				local ok, saved = pcall(function()
+					return NAmanage.NASettingsSet("devConsoleFilters", toggles)
+				end)
+				if ok and type(saved) == "table" then
+					for _, key in ipairs(buttonTypes) do
+						local savedValue = saved[key]
+						if type(savedValue) == "boolean" then
+							toggles[key] = savedValue
+						end
+					end
+				end
+			end
+
+			local targetColor = toggles[logType] and SELECTED_COLOR or DESELECTED_COLOR
 			local tweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
 			TweenService:Create(checkbox, tweenInfo, {BackgroundColor3 = targetColor}):Play()
 
@@ -32606,6 +41415,9 @@ RunService.RenderStepped:Connect(function()
 			opt.prefix = ";"
 			DoNotif("Invalid prefix detected. Resetting to default ';'")
 			lastPrefix = ";"
+			if NAmanage.SyncPrefixUI then
+				NAmanage.SyncPrefixUI()
+			end
 
 			local storedPrefix = NAmanage.NASettingsGet("prefix")
 			if isInvalid(storedPrefix) then
@@ -32630,27 +41442,42 @@ local TextLabel = InstanceNew("TextLabel")
 local UICorner = InstanceNew("UICorner")
 local UIStroke = InstanceNew("UIStroke")
 local TextButton
+local IconFallbackText
 local UICorner2 = InstanceNew("UICorner")
 
 NAICONASSET = nil
 
 pcall(function() NAICONASSET=(getcustomasset and (isAprilFools() and getcustomasset(NAfiles.NAASSETSFILEPATH.."/"..NAImageAssets.sWare) or getcustomasset(NAfiles.NAASSETSFILEPATH.."/"..NAImageAssets.Icon))) or nil end)
 
+TextButton = InstanceNew("ImageButton")
+TextButton.Image = NAICONASSET or ""
+
 if NAICONASSET then
-	TextButton = InstanceNew("ImageButton")
 	TextButton.Image = NAICONASSET
 else
-	TextButton = InstanceNew("TextButton")
-	TextButton.Font = Enum.Font.SourceSansBold
-	TextButton.TextColor3 = Color3.fromRGB(241, 241, 241)
-	TextButton.TextSize = 22
+	IconFallbackText = InstanceNew("TextLabel")
+	IconFallbackText.Name = "NAFallbackIconText"
+	IconFallbackText.BackgroundTransparency = 1
+	IconFallbackText.AnchorPoint = Vector2.new(0.5, 0.5)
+	IconFallbackText.Position = UDim2.new(0.5, 0, 0.5, 0)
+	IconFallbackText.Size = UDim2.new(1, 0, 1, 0)
+	IconFallbackText.Font = Enum.Font.SourceSansBold
+	IconFallbackText.TextColor3 = Color3.fromRGB(241, 241, 241)
+	IconFallbackText.TextSize = 22
 	if isAprilFools() then
 		cringyahhnamesidk = { "IY", "FE", "F3X", "HD", "CMD", "Ω", "R6", "Ø", "NA", "CMDX" }
-		TextButton.Text = cringyahhnamesidk[math.random(1, #cringyahhnamesidk)]
+		IconFallbackText.Text = cringyahhnamesidk[math.random(1, #cringyahhnamesidk)]
 	else
-		TextButton.Text = "NA"
+		IconFallbackText.Text = "NA"
 	end
+	IconFallbackText.TextStrokeTransparency = 0.7
+	IconFallbackText.Parent = TextButton
 end
+
+NAStuff.NAICONMAIN = TextButton
+NAStuff.IconFallbackLabel = IconFallbackText
+
+NAmanage.btUpdate()
 
 TextLabel.Parent = NAStuff.NASCREENGUI
 TextLabel.BackgroundColor3 = Color3.fromRGB(25, 26, 30)
@@ -32666,13 +41493,15 @@ TextLabel.TextWrapped = true
 TextLabel.TextStrokeTransparency = 0.7
 TextLabel.TextTransparency = 1
 TextLabel.ZIndex = 9999
+TextLabel.Active = true
+TextLabel.Selectable = false
 
 UICorner2.CornerRadius = UDim.new(0.25, 0)
 UICorner2.Parent = TextLabel
 
 UIStroke.Parent = TextLabel
 UIStroke.Thickness = 2
-UIStroke.Color = NAUISTROKER --Color3.fromRGB(148, 93, 255)
+UIStroke.Color = NAUISTROKER
 UIStroke.Transparency = 0.4
 UIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 
@@ -32684,6 +41513,9 @@ TextButton.BackgroundColor3 = Color3.fromRGB(25, 26, 30)
 TextButton.Position = UDim2.new(0.5, 0, -1, 0)
 TextButton.Size = UDim2.new(0, 32 * NAScale, 0, 32 * NAScale)
 TextButton.ZIndex = 9999
+if IconFallbackText then
+	IconFallbackText.ZIndex = TextButton.ZIndex + 1
+end
 
 UICorner.CornerRadius = UDim.new(1, 0)
 UICorner.Parent = TextButton
@@ -32700,13 +41532,296 @@ TextButton.MouseLeave:Connect(function()
 	}):Play()
 end)
 
+NAStuff.iconAppearance = NAStuff.iconAppearance or  {
+	background = TextButton.BackgroundTransparency;
+	text = (IconFallbackText and IconFallbackText.TextTransparency) or (TextButton:IsA("TextButton") and TextButton.TextTransparency) or nil;
+	stroke = (IconFallbackText and IconFallbackText.TextStrokeTransparency) or (TextButton:IsA("TextButton") and TextButton.TextStrokeTransparency) or nil;
+	image = TextButton:IsA("ImageButton") and TextButton.ImageTransparency or nil;
+}
+
+NAStuff.CustomIcon = NAStuff.CustomIcon or {}
+
+if NAmanage and type(NAmanage.NASettingsGet) == "function" then
+	local storedAsset = NAmanage.NASettingsGet("customIconAssetId")
+	if typeof(storedAsset) == "string" and storedAsset ~= "" then
+		NAStuff.CustomIcon.assetId = storedAsset
+	end
+	local storedEnabled = NAmanage.NASettingsGet("customIconEnabled")
+	if typeof(storedEnabled) == "boolean" then
+		NAStuff.CustomIcon.enabled = storedEnabled
+	end
+end
+
+function NAgui.iconSupported()
+	return TextButton and TextButton:IsA("ImageButton")
+end
+
+if not NAgui.iconSupported() then
+	NAStuff.CustomIcon.enabled = false
+else
+	if typeof(TextButton.Image) == "string" and TextButton.Image ~= "" then
+		NAStuff.CustomIcon.defaultImage = NAStuff.CustomIcon.defaultImage or TextButton.Image
+	end
+	if typeof(NAStuff.CustomIcon.assetId) ~= "string" or NAStuff.CustomIcon.assetId == "" then
+		NAStuff.CustomIcon.assetId = nil
+		NAStuff.CustomIcon.enabled = false
+	end
+end
+
+if typeof(NAStuff.CustomIcon.enabled) ~= "boolean" then
+	NAStuff.CustomIcon.enabled = false
+end
+
+function NAgui._saveIconSettings()
+	if not (NAmanage and type(NAmanage.NASettingsSet) == "function") then
+		return
+	end
+	local assetValue = NAStuff.CustomIcon.assetId
+	if typeof(assetValue) ~= "string" or assetValue == "" then
+		assetValue = ""
+	end
+	pcall(NAmanage.NASettingsSet, "customIconAssetId", assetValue)
+	pcall(NAmanage.NASettingsSet, "customIconEnabled", NAStuff.CustomIcon.enabled == true)
+end
+
+function NAgui.getIconDigits()
+	if typeof(NAStuff.CustomIcon.assetId) == "string" then
+		return NAStuff.CustomIcon.assetId:match("(%d+)$") or ""
+	end
+	return ""
+end
+
+function NAgui._applyIconState()
+	if not NAgui.iconSupported() then
+		return false
+	end
+	local state = NAStuff.CustomIcon
+	local targetImage
+	if state.enabled and typeof(state.assetId) == "string" and state.assetId ~= "" then
+		targetImage = state.assetId
+	elseif typeof(state.defaultImage) == "string" and state.defaultImage ~= "" then
+		targetImage = state.defaultImage
+	end
+	local applied = false
+	if targetImage and targetImage ~= "" then
+		TextButton.Image = targetImage
+		applied = true
+	else
+		TextButton.Image = ""
+	end
+	if NAStuff.IconFallbackLabel then
+		NAStuff.IconFallbackLabel.Visible = not applied
+	end
+	return applied
+end
+
+function NAgui.setIconEnabled(enabled, opts)
+	opts = opts or {}
+	if not NAgui.iconSupported() then
+		return false, "Custom icon requires \"getcustomasset\" support for the NA icon."
+	end
+	enabled = enabled and true or false
+	if enabled and not NAStuff.CustomIcon.assetId then
+		if not opts.skipToggle and NAgui.setToggleState then
+			NAgui.setToggleState("Use Custom NA Icon", false, { force = true, fire = false })
+		end
+		return false, "Add an asset id before enabling the custom icon."
+	end
+	if NAStuff.CustomIcon.enabled == enabled and not opts.force then
+		return true
+	end
+	NAStuff.CustomIcon.enabled = enabled
+	NAgui._applyIconState()
+	if not opts.skipToggle and NAgui.setToggleState then
+		NAgui.setToggleState("Use Custom NA Icon", enabled, { force = true, fire = false })
+	end
+	NAgui._saveIconSettings()
+	return true
+end
+
+function NAgui.setIconAsset(inputValue, opts)
+	opts = opts or {}
+	if not NAgui.iconSupported() then
+		return false, "Custom icon requires \"getcustomasset\" support for the NA icon."
+	end
+	local raw = typeof(inputValue) == "string" and inputValue or tostring(inputValue)
+	if typeof(raw) ~= "string" then
+		return false, "Enter a valid numeric asset id."
+	end
+	raw = raw:match("^%s*(.-)%s*$")
+	if raw == "" then
+		return false, "Enter a valid numeric asset id."
+	end
+	local digits = raw:match("^rbxassetid://(%d+)$") or raw:match("id=(%d+)") or raw:match("(%d+)$")
+	if not digits then
+		return false, "Enter a valid numeric asset id."
+	end
+	local newAsset = "rbxassetid://"..digits
+	NAStuff.CustomIcon.assetId = newAsset
+	if opts.autoEnable ~= false then
+		NAStuff.CustomIcon.enabled = true
+	end
+	NAgui._applyIconState()
+	if opts.autoEnable ~= false and not opts.skipToggle and NAgui.setToggleState then
+		NAgui.setToggleState("Use Custom NA Icon", true, { force = true, fire = false })
+	end
+	NAgui._saveIconSettings()
+	return true, digits
+end
+
+if NAStuff.CustomIcon.enabled and NAStuff.CustomIcon.assetId and NAgui.iconSupported() then
+	NAgui._applyIconState()
+end
+
+NAgui.clampIconPositionUDim=function(pos)
+	if typeof(pos) ~= "UDim2" then
+		return pos
+	end
+	if not TextButton or not TextButton.Parent then
+		return UDim2.new(math.clamp(pos.X.Scale, 0, 1), 0, math.clamp(pos.Y.Scale, 0, 1), 0)
+	end
+	local container = TextButton.Parent
+	local parentSize = container.AbsoluteSize
+	if parentSize.X <= 0 or parentSize.Y <= 0 then
+		local cam = workspace and workspace.CurrentCamera
+		if cam then
+			parentSize = cam.ViewportSize
+		end
+	end
+	if parentSize.X <= 0 or parentSize.Y <= 0 then
+		return UDim2.new(math.clamp(pos.X.Scale, 0, 1), 0, math.clamp(pos.Y.Scale, 0, 1), 0)
+	end
+	local anchor = TextButton.AnchorPoint or Vector2.new(0, 0)
+	local buttonSizeX = TextButton.AbsoluteSize.X
+	local buttonSizeY = TextButton.AbsoluteSize.Y
+	if buttonSizeX <= 0 then buttonSizeX = 32 * NAScale end
+	if buttonSizeY <= 0 then buttonSizeY = 32 * NAScale end
+	local absX = pos.X.Scale * parentSize.X + pos.X.Offset
+	local absY = pos.Y.Scale * parentSize.Y + pos.Y.Offset
+	local minX = anchor.X * buttonSizeX
+	local maxX = parentSize.X - (1 - anchor.X) * buttonSizeX
+	local minY = anchor.Y * buttonSizeY
+	local maxY = parentSize.Y - (1 - anchor.Y) * buttonSizeY
+	if maxX < minX then maxX = minX end
+	if maxY < minY then maxY = minY end
+	local clampedX = math.clamp(absX, minX, maxX)
+	local clampedY = math.clamp(absY, minY, maxY)
+	return UDim2.new(clampedX / parentSize.X, 0, clampedY / parentSize.Y, 0)
+end
+
+NAgui.getClampedIconPosition=function()
+	if not TextButton then return nil end
+	local clamped = NAgui.clampIconPositionUDim(TextButton.Position)
+	if clamped and clamped ~= TextButton.Position then
+		TextButton.Position = clamped
+	end
+	return clamped or TextButton.Position
+end
+
+NAgui.applyIconVisibility=function(hidden)
+	if not TextButton then return end
+	local fallbackText = NAStuff.IconFallbackLabel
+	local function setFallbackTrans()
+		if not fallbackText then return end
+		local defaultText = NAStuff.iconAppearance.text
+		local defaultStroke = NAStuff.iconAppearance.stroke
+		fallbackText.TextTransparency = hidden and 1 or (defaultText ~= nil and defaultText or 0)
+		if defaultStroke ~= nil then
+			fallbackText.TextStrokeTransparency = hidden and 1 or defaultStroke
+		end
+	end
+	if IsOnMobile and not IsOnPC then
+		TextButton.Visible = true
+		TextButton.BackgroundTransparency = hidden and 1 or NAStuff.iconAppearance.background
+		if TextButton:IsA("ImageButton") then
+			if hidden then
+				TextButton.ImageTransparency = 1
+			elseif NAStuff.iconAppearance.image ~= nil then
+				TextButton.ImageTransparency = NAStuff.iconAppearance.image
+			end
+		else
+			TextButton.TextTransparency = hidden and 1 or (NAStuff.iconAppearance.text or 0)
+			if NAStuff.iconAppearance.stroke ~= nil then
+				TextButton.TextStrokeTransparency = hidden and 1 or NAStuff.iconAppearance.stroke
+			end
+		end
+	else
+		TextButton.Visible = not hidden
+		TextButton.BackgroundTransparency = NAStuff.iconAppearance.background
+		if TextButton:IsA("ImageButton") then
+			if NAStuff.iconAppearance.image ~= nil then
+				TextButton.ImageTransparency = NAStuff.iconAppearance.image
+			end
+		else
+			if NAStuff.iconAppearance.text ~= nil then
+				TextButton.TextTransparency = NAStuff.iconAppearance.text
+			end
+			if NAStuff.iconAppearance.stroke ~= nil then
+				TextButton.TextStrokeTransparency = NAStuff.iconAppearance.stroke
+			end
+		end
+	end
+	setFallbackTrans()
+end
+
+NAgui.setIconHidden=function(hidden, opts)
+	opts = opts or {}
+	hidden = hidden and true or false
+	if NAStuff.IconInvisible == hidden and not opts.force then
+		return
+	end
+	NAStuff.IconInvisible = hidden
+	NAgui.applyIconVisibility(hidden)
+	if FileSupport then
+		pcall(NAmanage.NASettingsSet, "iconInvisible", hidden)
+	end
+	if not opts.skipToggle and NAgui.setToggleState then
+		NAgui.setToggleState("Hide NA Icon", hidden, { force = true, fire = false })
+	end
+end
+
+NAmanage.IconSetInvisible = NAgui.setIconHidden
+
+NAgui.setIconHidden(NAStuff.IconInvisible, { force = true, skipToggle = true })
+
+NAStuff.IconLocked = NAStuff.IconLocked or false
+
+NAgui._NAIconConnName=function()
+	return TextButton and "DraggerV2_"..TextButton:GetDebugId() or "DraggerV2_ICON"
+end
+
+NAgui.applyIconLock=function(locked)
+	if not TextButton then return end
+	if locked then
+		NAlib.disconnect(NAgui._NAIconConnName())
+	else
+		NAgui.draggerV2(TextButton)
+	end
+end
+
+NAgui.setIconLocked=function(locked, opts)
+	opts = opts or {}
+	locked = locked and true or false
+	if NAStuff.IconLocked == locked and not opts.force then return end
+	NAStuff.IconLocked = locked
+	NAgui.applyIconLock(locked)
+	if FileSupport then
+		NAmanage.NASettingsSet("iconLocked", locked)
+	end
+	if not opts.skipToggle and NAgui.setToggleState then
+		NAgui.setToggleState("Lock NA Icon", locked, { force = true, fire = false })
+	end
+end
+
+NAmanage.IconSetLocked = NAgui.setIconLocked
+
 swooshySWOOSH = false
 
 function Swoosh()
-	TweenService:Create(TextButton, TweenInfo.new(1.5, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out), {
-		Rotation = 720
-	}):Play()
-	NAgui.draggerV2(TextButton)
+	TweenService:Create(TextButton, TweenInfo.new(1.5, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out), {Rotation = 720}):Play()
+	if not NAStuff.IconLocked then
+		NAgui.draggerV2(TextButton)
+	end
 	if swooshySWOOSH then return end
 	swooshySWOOSH = true
 	TextButton.InputBegan:Connect(function(input)
@@ -32714,7 +41829,7 @@ function Swoosh()
 			input.Changed:Connect(function()
 				if input.UserInputState == Enum.UserInputState.End then
 					if FileSupport and NAiconSaveEnabled then
-						local pos = TextButton.Position
+						local pos = NAgui.getClampedIconPosition() or TextButton.Position
 						writefile(NAfiles.NAICONPOSPATH, HttpService:JSONEncode({
 							X = pos.X.Scale,
 							Y = pos.Y.Scale,
@@ -32729,6 +41844,29 @@ end
 
 function mainNameless()
 	local txtLabel = TextLabel
+	local fadeOutStarted = false
+
+	local function fadeOut()
+		if fadeOutStarted then return end
+		fadeOutStarted = true
+		local fadeOutTween = TweenService:Create(txtLabel, TweenInfo.new(0.6, Enum.EasingStyle.Elastic, Enum.EasingDirection.InOut), {
+			TextTransparency = 1,
+			BackgroundTransparency = 1,
+			Position = UDim2.new(0.5, 0, 0.52, 20),
+			Size = UDim2.new(0, 0, 0, 0)
+		})
+		fadeOutTween:Play()
+		fadeOutTween.Completed:Once(function()
+			txtLabel:Destroy()
+		end)
+	end
+
+	txtLabel.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			fadeOut()
+		end
+	end)
+
 	local textWidth = TextService:GetTextSize(txtLabel.Text, txtLabel.TextSize, txtLabel.Font, Vector2.new(math.huge, math.huge)).X
 	local finalSize = UDim2.new(0, textWidth + 80, 0, 40)
 
@@ -32762,7 +41900,16 @@ function mainNameless()
 		end
 	end
 
-	TextButton.Position = UDim2.new(targetPos.X.Scale, 0, targetPos.Y.Scale - 0.15, -20)
+	targetPos = NAgui.clampIconPositionUDim(targetPos)
+	if FileSupport and NAiconSaveEnabled then
+		pcall(writefile, NAfiles.NAICONPOSPATH, HttpService:JSONEncode({
+			X = targetPos.X.Scale,
+			Y = targetPos.Y.Scale,
+			Save = true
+		}))
+	end
+	local introPos = NAgui.clampIconPositionUDim(UDim2.new(targetPos.X.Scale, 0, targetPos.Y.Scale - 0.15, -20)) or targetPos
+	TextButton.Position = introPos
 
 	local tweenProps = {
 		Size = UDim2.new(0, 32 * NAScale, 0, 32 * NAScale),
@@ -32779,21 +41926,12 @@ function mainNameless()
 	Swoosh()
 
 	Wait(2.5)
-
-	local fadeOutTween = TweenService:Create(txtLabel, TweenInfo.new(0.6, Enum.EasingStyle.Elastic, Enum.EasingDirection.InOut), {
-		TextTransparency = 1,
-		BackgroundTransparency = 1,
-		Position = UDim2.new(0.5, 0, 0.52, 20),
-		Size = UDim2.new(0, 0, 0, 0)
-	})
-
-	fadeOutTween:Play()
-	fadeOutTween.Completed:Once(function()
-		txtLabel:Destroy()
-	end)
+	fadeOut()
 end
 
 coroutine.wrap(mainNameless)()
+
+NAgui.setIconLocked(NAStuff.IconLocked, { force = true, skipToggle = true })
 
 MouseButtonFix(TextButton,function()
 	NAgui.barSelect()
@@ -32849,7 +41987,7 @@ SpawnCall(function()
 			DoNotif(keybindMessage, 10, adminName.." Keybind Prefix")
 		end
 
-		SpawnCall(function() pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/ltseverydayyou/Nameless-Admin/main/SaveInstance.lua"))() end) end) -- it has better SaveInstance support and important functions that are required
+		SpawnCall(function() pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/ltseverydayyou/uuuuuuu/refs/heads/main/CoreGuiManipulation.luau"))() end) end) -- manipulates coregui checks
 		--Spawn(function() pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/ltseverydayyou/uuuuuuu/refs/heads/main/EnableChat.lua"))() end) end) -- better chat
 
 		-- just ignore this section (personal stuff)
@@ -33026,6 +42164,258 @@ end
 end]]
 math.randomseed(os.time())
 
+NAmanage.injectNAConsole = function()
+	if NAmanage._naConsoleInitialized then
+		return true
+	end
+
+	local function ensureCommandHelpers()
+		if not NAmanage._naConsoleDispatch then
+			local function splitArgs(line)
+				local out, buf, quote = {}, "", nil
+				for i = 1, #line do
+					local ch = Sub(line, i, i)
+					if quote then
+						if ch == quote then
+							quote = nil
+						else
+							buf = buf..ch
+						end
+					else
+						if ch == "'" or ch == '"' then
+							quote = ch
+						elseif ch == " " or ch == "\t" then
+							if #buf > 0 then
+								out[#out+1] = buf
+								buf = ""
+							end
+						else
+							buf = buf..ch
+						end
+					end
+				end
+				if #buf > 0 then
+					out[#out+1] = buf
+				end
+				return out
+			end
+
+			local function dispatchRun(...)
+				local runner = cmd and (cmd.run or cmd.Run)
+				if not runner then
+					return nil, "cmd.run not available"
+				end
+
+				local n = select("#", ...)
+				local argv
+				if n == 1 then
+					local a = ...
+					if type(a) == "table" then
+						argv = a
+					elseif type(a) == "string" then
+						argv = splitArgs(a)
+					else
+						return nil, "invalid input to cmdRun"
+					end
+				else
+					argv = {}
+					for i = 1, n do
+						local v = select(i, ...)
+						argv[#argv+1] = type(v) == "string" and v or tostring(v)
+					end
+				end
+
+				if #argv == 0 then
+					return nil, "no command provided"
+				end
+
+				local ok1, res1 = NACaller(runner, argv)
+				if ok1 then
+					return res1
+				end
+
+				local ok2, res2 = NACaller(runner, Concat(argv, " "))
+				if ok2 then
+					return res2
+				end
+
+				return nil, res2
+			end
+
+			NAmanage._naConsoleDispatch = dispatchRun
+		end
+
+		local dispatch = NAmanage._naConsoleDispatch
+		local targetEnv = (getgenv and getgenv()) or _G or {}
+		targetEnv.cmdRun = dispatch
+		targetEnv.RunCommand = dispatch
+		targetEnv.runCommand = dispatch
+	end
+
+	local commandLine = InstanceNew("Frame")
+	commandLine.Name = "NAConsole"
+	commandLine.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+	commandLine.BorderColor3 = Color3.fromRGB(184, 184, 184)
+	commandLine.Position = UDim2.new(0, 0, 1, -30)
+	commandLine.Size = UDim2.new(1, 0, 0, 30)
+	commandLine.ZIndex = 1
+	commandLine.AutoLocalize = false
+
+	local inputField = InstanceNew("Frame", commandLine)
+	inputField.Name = "InputField"
+	inputField.BackgroundTransparency = 1
+	inputField.ClipsDescendants = true
+	inputField.Position = UDim2.new(0, 30, 0, 0)
+	inputField.Size = UDim2.new(1, -30, 0, 30)
+	inputField.AutoLocalize = false
+	inputField.ZIndex = 1
+
+	local textbox = InstanceNew("TextBox", inputField)
+	textbox.Name = "TextBox"
+	textbox.BackgroundTransparency = 1
+	textbox.ClearTextOnFocus = false
+	textbox.Font = Enum.Font.Code
+	textbox.PlaceholderText = "NA Console Master"
+	textbox.Size = UDim2.new(1, 0, 1, 0)
+	textbox.Text = ""
+	textbox.TextColor3 = Color3.fromRGB(255, 255, 255)
+	textbox.TextSize = 15
+	textbox.TextXAlignment = Enum.TextXAlignment.Left
+	textbox.AutoLocalize = false
+	textbox.ZIndex = 2
+
+	local arrow = InstanceNew("TextLabel", commandLine)
+	arrow.Name = "Arrow"
+	arrow.BackgroundTransparency = 1
+	arrow.Font = Enum.Font.Code
+	arrow.Size = UDim2.new(0, 30, 1, 0)
+	arrow.Text = "> "
+	arrow.TextColor3 = Color3.fromRGB(255, 255, 255)
+	arrow.TextSize = 15
+	arrow.TextXAlignment = Enum.TextXAlignment.Right
+	arrow.AutoLocalize = false
+	arrow.ZIndex = 2
+
+	local function resetCommandLine()
+		if commandLine.Parent then
+			commandLine.Parent = nil
+		end
+		if textbox.Text ~= "" then
+			textbox.Text = ""
+		end
+	end
+
+	resetCommandLine()
+
+	local testService = SafeGetService("TestService")
+
+	local function reportError(message)
+		local filtered = tostring(message or "error")
+		filtered = filtered:gsub("%[string \"console\"%]:", "console:")
+		if testService then
+			pcall(function()
+				testService:Error(filtered)
+			end)
+		else
+			warn(filtered)
+		end
+	end
+
+	textbox.FocusLost:Connect(function(enterPressed)
+		if not enterPressed then
+			return
+		end
+		local commandText = textbox.Text
+		if commandText == "" or commandText:match("^%s*$") then
+			textbox.Text = ""
+			return
+		end
+		textbox.Text = ""
+		print("> "..commandText)
+
+		local trimmed = commandText:match("^%s*(.-)%s*$")
+		local commandLiteral = nil
+		if trimmed and trimmed ~= "" then
+			local firstChar = trimmed:sub(1, 1)
+			if (firstChar == '"' or firstChar == "'") and trimmed:sub(-1) == firstChar then
+				local literalChunk = loadstring("return "..trimmed, "console_literal")
+				if literalChunk then
+					local okLiteral, literalValue = pcall(literalChunk)
+					if okLiteral and type(literalValue) == "string" then
+						commandLiteral = literalValue
+					end
+				end
+			end
+		end
+
+		if commandLiteral then
+			ensureCommandHelpers()
+			local dispatch = NAmanage._naConsoleDispatch
+			if dispatch then
+				local okDispatch, dispatchErr = NACaller(dispatch, commandLiteral)
+				if not okDispatch then
+					reportError(dispatchErr or "command execution failed")
+				end
+			else
+				reportError("Command dispatcher unavailable")
+			end
+			return
+		end
+
+		local chunk, compileErr = loadstring(commandText, "console")
+		if not chunk then
+			reportError(compileErr or "compile error")
+			return
+		end
+
+		ensureCommandHelpers()
+
+		local ok, execErr = pcall(function()
+			if not cmd or not cmd.run then
+				error("cmd.run unavailable")
+			end
+			cmd.run({"loadstring", commandText})
+		end)
+		if not ok then
+			reportError(execErr or "execution error")
+		end
+	end)
+
+	local function ensureInjection()
+		local coreGui = COREGUI
+		if not coreGui then
+			resetCommandLine()
+			return
+		end
+
+		local master = coreGui:FindFirstChild("DevConsoleMaster")
+		if not master then
+			resetCommandLine()
+			return
+		end
+
+		local window = master:FindFirstChild("DevConsoleWindow")
+		if not window or window.Visible == false then
+			resetCommandLine()
+			return
+		end
+
+		if commandLine.Parent ~= window then
+			commandLine.Parent = window
+		end
+	end
+
+	NAlib.disconnect("naconsole_loop")
+	NAlib.connect("naconsole_loop", RunService.Heartbeat:Connect(ensureInjection))
+	ensureInjection()
+
+	NAmanage._naConsoleInitialized = true
+	NAmanage._naConsoleFrame = commandLine
+	NAmanage._naConsoleTextBox = textbox
+	NAmanage._naConsoleArrow = arrow
+	return true
+end
+
 SpawnCall(function()
 	SpawnCall(function() Lighting.LightingStyle=Enum.LightingStyle.Soft end)
 	while Wait(0.25) and getChar() do
@@ -33053,6 +42443,7 @@ SpawnCall(function() -- init
 end)
 
 NAmanage.scheduleLoader('BindDevConsole', NAmanage.bindToDevConsole)
+NAmanage.scheduleLoader('NAConsole', NAmanage.injectNAConsole)
 NAmanage.scheduleLoader('Aliases', NAmanage.loadAliases)
 NAmanage.scheduleLoader('UserButtons', function()
 	NAmanage.loadButtonIDS()
@@ -33697,8 +43088,8 @@ end)
 	end)
 end]]
 
-NAgui.addTab(TAB_ALL, { default = true, order = 0 })
-NAgui.addTab(TAB_GENERAL, { order = 1 })
+NAgui.addTab(TAB_ALL, { default = true, order = 0, textIcon = "grid" })
+NAgui.addTab(TAB_GENERAL, { order = 1, textIcon = "gear" })
 NAgui.setTab(TAB_GENERAL)
 
 NAgui.addSection("Prefix Settings")
@@ -33719,6 +43110,9 @@ NAgui.addInput("Prefix", "Enter a Prefix", opt.prefix, function(text)
 	else
 		opt.prefix = newPrefix
 		DoNotif("Prefix set to: "..newPrefix)
+		if NAmanage.SyncPrefixUI then
+			NAmanage.SyncPrefixUI()
+		end
 	end
 end)
 
@@ -33740,11 +43134,33 @@ NAgui.addToggle("Keep "..adminName, NAQoTEnabled, function(val)
 		DoNotif("QueueOnTeleport has been disabled. "..adminName.." will no longer auto-run after teleport", 3)
 	end
 end)
+NAmanage.RegisterToggleAutoSync("Keep "..adminName, function()
+	return NAQoTEnabled == true
+end)
+
+NAgui.addToggle("Hide NA Icon", NAStuff.IconInvisible, function(v)
+	NAmanage.IconSetInvisible(v, { skipToggle = true, force = true })
+	DoNotif("Icon Visibility is "..(v and "Off" or "On"), 2)
+end)
+NAmanage.RegisterToggleAutoSync("Hide NA Icon", function()
+	return NAStuff.IconInvisible == true
+end)
+
+NAgui.addToggle("Lock NA Icon", NAStuff.IconLocked, function(v)
+	NAgui.setIconLocked(v, { force = true, skipToggle = true })
+	DoNotif("Icon Position is "..(v and "Locked" or "Unlocked"), 2)
+end)
+NAmanage.RegisterToggleAutoSync("Lock NA Icon", function()
+	return NAStuff.IconLocked == true
+end)
 
 NAgui.addToggle("Command Predictions Prompt", doPREDICTION, function(v)
 	doPREDICTION = v
 	DoNotif("Command Predictions "..(v and "Enabled" or "Disabled"), 2)
 	NAmanage.NASettingsSet("prediction", v)
+end)
+NAmanage.RegisterToggleAutoSync("Command Predictions Prompt", function()
+	return doPREDICTION == true
 end)
 
 NAgui.addToggle("Debug Notifications", NAStuff.nuhuhNotifs, function(v)
@@ -33752,27 +43168,72 @@ NAgui.addToggle("Debug Notifications", NAStuff.nuhuhNotifs, function(v)
 	DoNotif("Debug Notifications "..(v and "Enabled" or "Disabled"), 2)
 	NAmanage.NASettingsSet("notifsToggle", v)
 end)
+NAmanage.RegisterToggleAutoSync("Debug Notifications", function()
+	return NAStuff.nuhuhNotifs == true
+end)
 
-local autoSkipSetting = NAmanage.getAutoSkipPreference()
-NAgui.addToggle("Auto Skip Loading Screen", autoSkipSetting, function(v)
+NAgui.addToggle("Auto Skip Loading Screen", NAmanage.getAutoSkipPreference(), function(v)
 	NAmanage.setAutoSkipPreference(v)
 	DoNotif("Auto skip loading screen "..(v and "enabled" or "disabled"), 2)
 end)
+NAmanage.RegisterToggleAutoSync("Auto Skip Loading Screen", function()
+	return NAmanage.getAutoSkipPreference() == true
+end)
 
 NAgui.addToggle("Keep Icon Position", NAiconSaveEnabled, function(v)
-	local pos = TextButton.Position
+	local pos = NAgui.getClampedIconPosition() or TextButton.Position
+	if v then
+		TextButton.Position = pos
+	else
+		pos = NAgui.clampIconPositionUDim(UDim2.new(0.5, 0, 0.1, 0))
+	end
 	writefile(NAfiles.NAICONPOSPATH, HttpService:JSONEncode({
-		X = v and pos.X.Scale or 0.5,
-		Y = v and pos.Y.Scale or 0.1,
+		X = pos.X.Scale,
+		Y = pos.Y.Scale,
 		Save = v
 	}))
 	NAiconSaveEnabled = v
 	DoNotif("Icon position "..(v and "will be saved" or "won't be saved").." on exit", 2)
 end)
+NAmanage.RegisterToggleAutoSync("Keep Icon Position", function()
+	return NAiconSaveEnabled == true
+end)
 
-NAgui.addTab(TAB_INTERFACE, { order = 2 })
+NAgui.addSection("Support")
+NAgui.addButton("Join Discord", function()
+	if setclipboard then
+		setclipboard(inviteLink)
+		DoNotif("Discord link copied to clipboard!")
+	else
+		DoNotif("Unable to copy automatically. Invite: "..inviteLink, 3)
+	end
+end)
+
+if FileSupport then
+	NAgui.addSection("Saved Data")
+	NAgui.addButton("Delete Saved Settings...", function()
+		NAmanage.openSettingsCleanupPopup()
+	end)
+end
+
+NAgui.addTab(TAB_INTEGRATIONS, { order = 1.5, textIcon = "chain-link" })
+NAgui.setTab(TAB_INTEGRATIONS)
+
+NAgui.addSection("Integrations")
+
+NAgui.addToggle("Bloxtrap RPC Presence", NAmanage.btEnabled(), function(v)
+	NAmanage.btSetEnabled(v)
+	if v then
+		NAmanage.btGetExecutorInfo(true)
+		NAmanage.btUpdate()
+	end
+end)
+NAmanage.RegisterToggleAutoSync("Bloxtrap RPC Presence", function()
+	return NAmanage.btEnabled()
+end)
+
+NAgui.addTab(TAB_INTERFACE, { order = 2, textIcon = "paint-brush" })
 NAgui.setTab(TAB_INTERFACE)
-
 
 NAgui.addSection("UI Customization")
 
@@ -33782,10 +43243,35 @@ NAgui.addSlider("NA Icon Size", 0.5, 3, NAScale, 0.01, "", function(val)
 	NAmanage.NASettingsSet("buttonSize", val)
 end)
 
-NAgui.addColorPicker("UI Stroke", NAUISTROKER, function(color)
-	for _, element in ipairs(NACOLOREDELEMENTS) do
-		if element:IsA("UIStroke") then
-			element.Color = color
+NAgui.addColorPicker("Main Color", NAUISTROKER, function(color)
+	if typeof(color) == "Color3" then
+		NAUISTROKER = color
+		for _, element in ipairs(NACOLOREDELEMENTS) do
+			if typeof(element) == "Instance" and element:IsA("UIStroke") then
+				element.Color = color
+			end
+		end
+		if TabManager and TabManager.tabs then
+			for name, info in pairs(TabManager.tabs) do
+				local btn = info and info.button
+				if btn then
+					local stroke = btn:FindFirstChildWhichIsA("UIStroke", true)
+					if stroke then
+						local computeColor = NAmanage.getTabStrokeColor
+						if typeof(computeColor) == "function" then
+							stroke.Color = computeColor(TabManager.current == name)
+						else
+							stroke.Color = color
+						end
+					end
+					if originalIO.applyTabDisplayText then
+						originalIO.applyTabDisplayText(info, {
+							isActive = info._isActive,
+							defaultColor = color,
+						})
+					end
+				end
+			end
 		end
 	end
 	SaveUIStroke(color)
@@ -33804,11 +43290,14 @@ end)
 
 if CoreGui then
 	local PT = {
-		path     = NAfiles.NAFILEPATH.."/plexity_theme.json",
-		default  = { enabled = false, start = { h = 0.8, s = 1, v = 1 }, finish = { h = 0, s = 1, v = 1 } },
-		cg       = CoreGui,
-		images   = setmetatable({}, { __mode = "k" }),
-		watchers = setmetatable({}, { __mode = "k" }),
+		path      = NAfiles.NAFILEPATH.."/plexity_theme.json",
+		default   = { enabled = false, start = { h = 0.8, s = 1, v = 1 }, finish = { h = 0, s = 1, v = 1 } },
+		cg        = CoreGui,
+		images    = {},
+		queue     = {},
+		queueSet  = {},
+		processing = false,
+		applying   = false,
 	}
 
 	local data = PT.default
@@ -33828,30 +43317,40 @@ if CoreGui then
 
 	PT.data = data
 
-	local propertyWatchList = {"Image", "Texture", "TextureId"}
+	local HUI = (typeof(gethui) == "function" and gethui()) or nil
+
+	local function isPlexTarget(o)
+		if HUI and o:IsDescendantOf(HUI) then
+			return false
+		end
+		return o:IsA("ImageLabel")
+			or o:IsA("ImageButton")
+			or o:IsA("TextLabel")
+			or o:IsA("TextButton")
+	end
 
 	local function getImageId(o)
-		for _, prop in ipairs(propertyWatchList) do
-			local value = NAlib.isProperty(o, prop)
-			if type(value) == "string" and value ~= "" then
-				return value
-			end
+		local value = NAlib.isProperty(o, "Image")
+		if type(value) == "string" and value ~= "" then
+			return value
+		end
+		value = NAlib.isProperty(o, "Texture")
+		if type(value) == "string" and value ~= "" then
+			return value
+		end
+		value = NAlib.isProperty(o, "TextureId")
+		if type(value) == "string" and value ~= "" then
+			return value
 		end
 		return nil
 	end
 
-	local function clearWatch(o)
-		local conns = PT.watchers[o]
-		if conns then
-			for _, conn in ipairs(conns) do
-				conn:Disconnect()
-			end
-			PT.watchers[o] = nil
-		end
-	end
-
 	local function applyIfReady(o)
 		if not (o and o.Parent) then
+			return false
+		end
+
+		if HUI and o:IsDescendantOf(HUI) then
 			return false
 		end
 
@@ -33860,64 +43359,47 @@ if CoreGui then
 			return true
 		end
 
-		if not (o:IsA("ImageLabel") or o:IsA("ImageButton")) then
+		if not isPlexTarget(o) then
 			return false
 		end
 
-		local id = getImageId(o)
-		if type(id) == "string" and id:match("img_set_%dx_%d+%.png$") then
+		local imgId = getImageId(o)
+		if type(imgId) == "string" and imgId:match("img_set_%dx_%d+%.png$") then
 			PT.images[o] = true
 			NAmanage.plex_apply(o)
 			return true
 		end
 
+		if o:IsA("TextLabel") or o:IsA("TextButton") then
+			local ff = NAlib.isProperty(o, "FontFace")
+			local ffType = ff and typeof(ff) or nil
+			local fam = ff and ff.Family or nil
+
+			if (ffType == "Font" or ffType == "FontFace")
+				and type(fam) == "string"
+				and fam:find("BuilderIcons/BuilderIcons.json", 1, true)
+			then
+				PT.images[o] = true
+				NAmanage.plex_apply(o)
+				return true
+			end
+		end
+
 		return false
 	end
 
-	local function watchUntilReady(o)
-		if PT.watchers[o] or not (o:IsA("ImageLabel") or o:IsA("ImageButton")) then
-			return
-		end
-
-		local conns = {}
-		local function track(conn)
-			if conn then
-				Insert(conns, conn)
-			end
-		end
-
-		for _, prop in ipairs(propertyWatchList) do
-			local ok, signal = pcall(function()
-				return o:GetPropertyChangedSignal(prop)
-			end)
-			if ok and signal then
-				track(signal:Connect(function()
-					if applyIfReady(o) then
-						clearWatch(o)
-					end
-				end))
-			end
-		end
-
-		track(o.AncestryChanged:Connect(function(_, parent)
-			if not parent then
-				clearWatch(o)
-				PT.images[o] = nil
-			end
-		end))
-
-		if #conns > 0 then
-			PT.watchers[o] = conns
-		end
-	end
-
 	NAmanage.plex_remove = function(o)
-		clearWatch(o)
-		local g = o:FindFirstChildOfClass("UIGradient")
+		local g = o and o:FindFirstChildOfClass("UIGradient")
 		if g then g:Destroy() end
 	end
 
 	NAmanage.plex_apply = function(o)
+		if not (o and o.Parent) then
+			return
+		end
+		if HUI and o:IsDescendantOf(HUI) then
+			return
+		end
 		NAmanage.plex_remove(o)
 		if PT.data.enabled then
 			local seq = ColorSequence.new{
@@ -33934,28 +43416,100 @@ if CoreGui then
 		end
 	end
 
-	NAmanage.plex_add = function(o)
-		if applyIfReady(o) then
+	local function enqueue(o)
+		if not o then
 			return
 		end
-		watchUntilReady(o)
+		if PT.queueSet[o] then
+			return
+		end
+		if HUI and o:IsDescendantOf(HUI) then
+			return
+		end
+		PT.queueSet[o] = true
+		table.insert(PT.queue, o)
+	end
+
+	local function processQueue()
+		if PT.processing then
+			return
+		end
+		PT.processing = true
+		coroutine.wrap(function()
+			while #PT.queue > 0 do
+				local stepCount = math.min(#PT.queue, 50)
+				for i = 1, stepCount do
+					local o = table.remove(PT.queue, 1)
+					if o then
+						PT.queueSet[o] = nil
+						if o.Parent then
+							applyIfReady(o)
+						end
+					end
+				end
+				task.wait()
+			end
+			PT.processing = false
+		end)()
+	end
+
+	NAmanage.plex_add = function(o)
+		enqueue(o)
+		processQueue()
 	end
 
 	NAmanage.plex_applyAll = function()
-		for o in pairs(PT.images) do
-			NAmanage.plex_add(o)
+		if PT.applying then
+			return
 		end
+		PT.applying = true
+		coroutine.wrap(function()
+			local n = 0
+			for o in pairs(PT.images) do
+				if o and o.Parent then
+					NAmanage.plex_apply(o)
+				else
+					PT.images[o] = nil
+				end
+				n += 1
+				if n % 50 == 0 then
+					task.wait()
+				end
+			end
+			PT.applying = false
+		end)()
 	end
 
-	for _, o in ipairs(PT.cg:GetDescendants()) do
-		NAmanage.plex_add(o)
+	local function rescanAll()
+		coroutine.wrap(function()
+			local cg = PT.cg
+			if cg then
+				local desc = cg:GetDescendants()
+				for i = 1, #desc do
+					enqueue(desc[i])
+					if i % 200 == 0 then
+						task.wait()
+					end
+				end
+				processQueue()
+			end
+		end)()
 	end
+
+	rescanAll()
 
 	local function onDescendantAdded(o)
-		NAmanage.plex_add(o)
-		for _, desc in ipairs(o:GetDescendants()) do
-			NAmanage.plex_add(desc)
-		end
+		coroutine.wrap(function()
+			enqueue(o)
+			local desc = o:GetDescendants()
+			for i = 1, #desc do
+				enqueue(desc[i])
+				if i % 100 == 0 then
+					task.wait()
+				end
+			end
+			processQueue()
+		end)()
 	end
 
 	NAlib.disconnect("PlexyDesc")
@@ -33965,9 +43519,6 @@ if CoreGui then
 	NAgui.addToggle("Enable Theme", PT.data.enabled, function(v)
 		PT.data.enabled = v
 		if v then
-			for _, o in ipairs(PT.cg:GetDescendants()) do
-				NAmanage.plex_add(o)
-			end
 			NAmanage.plex_applyAll()
 		else
 			for o in pairs(PT.images) do
@@ -33996,14 +43547,15 @@ if CoreGui then
 			writefile(PT.path, HttpService:JSONEncode(PT.data))
 		end
 	end)
+
+	NAmanage.initCornerEditor(CoreGui, HUI)
+
 	if previousTab and previousTab ~= TAB_INTERFACE then
 		if NAgui.getActiveTab() == TAB_INTERFACE then
 			NAgui.setTab(previousTab)
 		end
 	end
 end
-
-
 
 local joinLeaveWarned = false
 local function persistJoinLeaveConfig()
@@ -34015,7 +43567,7 @@ local function persistJoinLeaveConfig()
 	end
 end
 
-NAgui.addTab(TAB_LOGGING, { order = 5 })
+NAgui.addTab(TAB_LOGGING, { order = 5, textIcon = "list-bulleted" })
 NAgui.setTab(TAB_LOGGING)
 
 NAgui.addSection("Join/Leave Logging")
@@ -34038,7 +43590,7 @@ NAgui.addToggle("Save Join/Leave Logs", JoinLeaveConfig.SaveLog, function(v)
 	DoNotif("Join/Leave log saving has been "..(v and "enabled" or "disabled"), 2)
 end)
 
-NAgui.addTab(TAB_ESP, { order = 4 })
+NAgui.addTab(TAB_ESP, { order = 4, textIcon = "crosshairs" })
 NAgui.setTab(TAB_ESP)
 
 NAgui.isListActive=function(list)
@@ -34308,7 +43860,7 @@ NAgui.addButton("Clear Folder ESP", function()
 	end)
 end)
 
-NAgui.addTab(TAB_CHAT, { order = 3 })
+NAgui.addTab(TAB_CHAT, { order = 3, textIcon = "speech-bubble-align-center" })
 NAgui.setTab(TAB_CHAT)
 
 do
@@ -34324,6 +43876,64 @@ do
 	end
 
 	NAgui.addSection("Text Chat")
+	NAgui.addToggle("Enable Custom Chat Styling", NAStuff.ChatSettings.customEnabled, function(v)
+		local wasEnabled = NAStuff.ChatSettings.customEnabled == true
+		NAStuff.ChatSettings.customEnabled = v
+
+		if wasEnabled and not v then
+			originalIO.backupChatSection("bubbles")
+			if not originalIO.assignChatSectionFromTemplate("bubbles") then
+				originalIO.restoreChatSectionFromBackup("bubbles")
+			end
+		elseif v and not wasEnabled then
+			if not originalIO.restoreChatSectionFromBackup("bubbles") and type(NAStuff.ChatSettings.bubbles) ~= "table" then
+				originalIO.assignChatSectionFromTemplate("bubbles")
+			end
+		end
+
+		NAmanage.SaveTextChatSettings()
+		NAmanage.ApplyTextChatSettings()
+	end)
+	NAgui.addButton("Reset Custom Chat Settings", function()
+		local ok, err = pcall(function()
+			local template = NAStuff.ChatSettingsTemplate
+			if type(template) ~= "table" then
+				error("Chat default settings unavailable.")
+			end
+
+			local current = NAStuff.ChatSettings
+			local preserveCustom = (current and current.customEnabled) or false
+			local preserveCoreChat = (current and current.coreGuiChat ~= nil) and current.coreGuiChat or true
+			local templateCopy = originalIO.deepCopyTable(template)
+
+			if type(current) ~= "table" then
+				current = {}
+				NAStuff.ChatSettings = current
+			end
+
+			for key in pairs(current) do
+				current[key] = nil
+			end
+			for key, value in pairs(templateCopy) do
+				current[key] = value
+			end
+
+			NAStuff.ChatSettingsCustomBackup = nil
+			current.customEnabled = preserveCustom
+			current.coreGuiChat = preserveCoreChat
+
+			NAStuff.ChatCustomizationActive = nil
+			NAmanage.SaveTextChatSettings()
+			NAmanage.ApplyTextChatSettings()
+		end)
+
+		if ok then
+			DoNotif("Chat style options reset to defaults.", 2)
+		else
+			warn("[NA] Reset Custom Chat Settings failed:", err)
+			DoNotif("Failed to reset chat settings. Check console for details.", 3)
+		end
+	end)
 
 	NAgui.addToggle("Enable Chat (CoreGui)", NAStuff.ChatSettings.coreGuiChat, function(v)
 		NAStuff.ChatSettings.coreGuiChat = v; NAmanage.SaveTextChatSettings(); NAmanage.ApplyTextChatSettings()
@@ -34424,64 +44034,84 @@ do
 	end)
 end
 
-NAgui.addTab(TAB_KEYBINDS, { order = 6 })
-NAgui.setTab(TAB_KEYBINDS)
+if not IsOnMobile then
+	NAgui.addTab(TAB_KEYBINDS, { order = 6, textIcon = "xbox-a" })
+	NAgui.setTab(TAB_KEYBINDS)
 
-if IsOnPC then
-	NAgui.addSection("Control Lock")
-	NAgui.addKeybind("Add Shiftlock Key","LeftShift",function(k)
-		if k then NAmanage.ControlLock_AddKey(k) end
-	end)
-	NAgui.addKeybind("Remove Shiftlock Key","RightShift",function(k)
-		if k then NAmanage.ControlLock_RemoveKey(k) end
-	end)
-	NAgui.addButton("Apply Saved Keys",function()
-		NAmanage.ControlLock_Apply(NAStuff._ctrlLockKeys)
-	end)
-	NAgui.addButton("Reset To Default (Shift)",function()
-		NAmanage.ControlLock_ClearToDefault()
-	end)
-	NAgui.addToggle("Reapply On Respawn",NAStuff._ctrlLockPersist,function(state)
-		NAStuff._ctrlLockPersist = state and true or false
-		NAmanage.ControlLock_Bind()
-	end)
+	if IsOnPC then
+		NAgui.addSection("Control Lock")
+		NAgui.addKeybind("Add Shiftlock Key","LeftShift",function(k)
+			if k then NAmanage.ControlLock_AddKey(k) end
+		end)
+		NAgui.addKeybind("Remove Shiftlock Key","RightShift",function(k)
+			if k then NAmanage.ControlLock_RemoveKey(k) end
+		end)
+		NAgui.addButton("Apply Saved Keys",function()
+			NAmanage.ControlLock_Apply(NAStuff._ctrlLockKeys)
+		end)
+		NAgui.addButton("Reset To Default (Shift)",function()
+			NAmanage.ControlLock_ClearToDefault()
+		end)
+		NAgui.addToggle("Reapply On Respawn",NAStuff._ctrlLockPersist,function(state)
+			NAStuff._ctrlLockPersist = state and true or false
+			NAmanage.ControlLock_Bind()
+		end)
 
-	NAgui.addSection("Fly Keybinds")
-	NAgui.addInput("Fly Keybind","Enter Keybind","F",function(text)
-		local newKey=(text or ""):lower()
-		if newKey=="" then DoNotif("Please provide a keybind.") return end
-		flyVariables.toggleKey=newKey
-		if flyVariables.keybindConn then flyVariables.keybindConn:Disconnect() flyVariables.keybindConn=nil end
-		NAmanage.connectFlyKey()
-		DebugNotif("Fly keybind set to '"..flyVariables.toggleKey:upper().."'")
-	end)
-	NAgui.addInput("vFly Keybind","Enter Keybind","V",function(text)
-		local newKey=(text or ""):lower()
-		if newKey=="" then DoNotif("Please provide a keybind.") return end
-		flyVariables.vToggleKey=newKey
-		if flyVariables.vKeybindConn then flyVariables.vKeybindConn:Disconnect() flyVariables.vKeybindConn=nil end
-		NAmanage.connectVFlyKey()
-		DebugNotif("vFly keybind set to '"..flyVariables.vToggleKey:upper().."'")
-	end)
-	NAgui.addInput("cFly Keybind","Enter Keybind","C",function(text)
-		local newKey=(text or ""):lower()
-		if newKey=="" then DoNotif("Please provide a keybind.") return end
-		flyVariables.cToggleKey=newKey
-		if flyVariables.cKeybindConn then flyVariables.cKeybindConn:Disconnect() flyVariables.cKeybindConn=nil end
-		NAmanage.connectCFlyKey()
-		DebugNotif("CFrame fly keybind set to '"..flyVariables.cToggleKey:upper().."'")
-	end)
-	NAgui.addInput("tFly Keybind","Enter Keybind","T",function(text)
-		local newKey=(text or ""):lower()
-		if newKey=="" then DoNotif("Please provide a key.") return end
-		flyVariables.tflyToggleKey=newKey
-		if flyVariables.tflyKeyConn then flyVariables.tflyKeyConn:Disconnect() flyVariables.tflyKeyConn=nil end
-		NAmanage.connectTFlyKey()
-		DebugNotif("TFly keybind set to '"..flyVariables.tflyToggleKey:upper().."'")
-	end)
+		NAgui.addSection("Fly Keybinds")
+		local function createFlyKeybindHandler(varField, connField, connectFunc, successTemplate, emptyMessage)
+			emptyMessage = emptyMessage or "Please provide a keybind."
+			return function(keyName)
+				if keyName == nil then
+					return
+				end
+				local newKey = tostring(keyName or ""):lower()
+				if newKey == "" then
+					DoNotif(emptyMessage)
+					return
+				end
+				flyVariables[varField] = newKey
+				local existingConn = flyVariables[connField]
+				if existingConn then
+					existingConn:Disconnect()
+					flyVariables[connField] = nil
+				end
+				connectFunc()
+				DebugNotif(Format(successTemplate, newKey:upper()))
+			end
+		end
+
+		NAgui.addKeybind("Fly Keybind", string.upper(flyVariables.toggleKey or "F"), createFlyKeybindHandler(
+			"toggleKey",
+			"keybindConn",
+			NAmanage.connectFlyKey,
+			"Fly keybind set to '%s'"
+			))
+
+		NAgui.addKeybind("vFly Keybind", string.upper(flyVariables.vToggleKey or "V"), createFlyKeybindHandler(
+			"vToggleKey",
+			"vKeybindConn",
+			NAmanage.connectVFlyKey,
+			"vFly keybind set to '%s'"
+			))
+
+		NAgui.addKeybind("cFly Keybind", string.upper(flyVariables.cToggleKey or "C"), createFlyKeybindHandler(
+			"cToggleKey",
+			"cKeybindConn",
+			NAmanage.connectCFlyKey,
+			"CFrame fly keybind set to '%s'"
+			))
+
+		NAgui.addKeybind("tFly Keybind", string.upper(flyVariables.tflyToggleKey or "T"), createFlyKeybindHandler(
+			"tflyToggleKey",
+			"tflyKeyConn",
+			NAmanage.connectTFlyKey,
+			"TFly keybind set to '%s'",
+			"Please provide a key."
+			))
+	end
 end
 
-NAgui.addTab(TAB_CHARACTER, { order = 7 })
+NAgui.addTab(TAB_CHARACTER, { order = 7, textIcon = "circle-person" })
 NAgui.setTab(TAB_CHARACTER)
 
 NAgui.addSection("Character Morph")
@@ -34536,6 +44166,599 @@ NAgui.addButton("Remove Light", function()
 	end
 end)
 
+do
+	local previousTab = NAgui.getActiveTab()
+	NAgui.addTab(TAB_BASIC_INFO, { order = 7.5, textIcon = "circle-i" })
+	NAgui.setTab(TAB_BASIC_INFO)
+
+	local basicInfoConfig = {
+		{
+			title = "Player";
+			fields = {
+				{ id = "playerDisplayName", label = "Display Name", path = {"player","displayName"} };
+				{ id = "playerUsername", label = "Username", path = {"player","username"} };
+				{ id = "playerUserId", label = "UserId", path = {"player","userId"} };
+				{ id = "playerAccountAge", label = "Account Age", path = {"player","accountAge"} };
+				{ id = "playerMembership", label = "Membership", path = {"player","membership"} };
+			};
+		},
+		{
+			title = "Platform";
+			fields = {
+				{ id = "platformName", label = "Platform", path = {"platform","platform"} };
+				{ id = "executorName", label = "Executor", path = {"platform","executor"} };
+			};
+		},
+		{
+			title = "Game";
+			fields = {
+				{ id = "gameName", label = "Game Name", path = {"game","name"} };
+				{ id = "gameCreator", label = "Creator", path = {"game","creator"} };
+			};
+		},
+		{
+			title = "Identifiers";
+			fields = {
+				{ id = "placeId", label = "Place ID", path = {"ids","placeId"} };
+				{ id = "gameId", label = "Game ID", path = {"ids","gameId"} };
+				{ id = "jobId", label = "Job ID", path = {"ids","jobId"} };
+			};
+		},
+		{
+			title = "Server";
+			fields = {
+				{ id = "serverPlayers", label = "Players", path = {"server","playerCount"} };
+			};
+		},
+		{
+			title = "System";
+			fields = {
+				{ id = "robloxLocale", label = "Roblox Locale", path = {"system","robloxLocale"} };
+				{ id = "systemLocale", label = "System Locale", path = {"system","systemLocale"} };
+				{ id = "qualitySetting", label = "Graphics Quality", path = {"system","quality"} };
+				{ id = "voiceStatus", label = "Voice Chat", path = {"system","voice"} };
+			};
+		},
+		{
+			title = "Flags";
+			fields = {
+				{ id = "naVersion", label = "NA Version", path = {"flags","version"} };
+				{ id = "aprilMode", label = "April Fools Mode", path = {"flags","aprilFools"} };
+				{ id = "timestamp", label = "Timestamp", path = "timestamp" };
+			};
+		},
+	}
+
+	local basicInfoBoxes = {}
+
+	local function resolveValue(snapshot, path)
+		local current = snapshot
+		if type(path) == "table" then
+			for _, key in ipairs(path) do
+				if current == nil then
+					break
+				end
+				current = current[key]
+			end
+		elseif path ~= nil then
+			current = current and current[path] or nil
+		end
+		if current == nil or current == "" then
+			return "Unknown"
+		end
+		return tostring(current)
+	end
+
+	for _, section in ipairs(basicInfoConfig) do
+		if NAgui.addSection then
+			NAgui.addSection(section.title)
+		end
+		for _, field in ipairs(section.fields) do
+			local box = NAgui.addInfo(field.label, "")
+			if box then
+				box.TextXAlignment = Enum.TextXAlignment.Left
+				box.TextYAlignment = Enum.TextYAlignment.Center
+				box.TextWrapped = false
+				box.TextScaled = false
+				box.Selectable = true
+				box.Active = true
+				local frame = box.Parent
+				if frame and frame:IsA("Frame") then
+					frame:SetAttribute("NAMinWidth", 180)
+				end
+			end
+			basicInfoBoxes[field.id] = box
+		end
+	end
+
+	local function refreshBasicInfo()
+		local snapshot = NAmanage.GetBasicInfoSnapshot()
+		for _, section in ipairs(basicInfoConfig) do
+			for _, field in ipairs(section.fields) do
+				local box = basicInfoBoxes[field.id]
+				if box then
+					local value = resolveValue(snapshot, field.path)
+					box.Text = value
+				end
+			end
+		end
+	end
+
+	NAgui.RefreshBasicInfo = refreshBasicInfo
+	refreshBasicInfo()
+	NAgui.addButton("Refresh Basic Info", refreshBasicInfo)
+
+	local updateInterval = 1
+	if not NAgui.BasicInfoUpdate then
+		NAgui.BasicInfoUpdate = { interval = updateInterval, last = 0 }
+		NAgui.BasicInfoUpdate.conn = RunService.Heartbeat:Connect(function()
+			local data = NAgui.BasicInfoUpdate
+			if not data then
+				return
+			end
+			if not TabManager or TabManager.current ~= TAB_BASIC_INFO then
+				return
+			end
+			local now = tick()
+			if now - data.last >= data.interval then
+				data.last = now
+				refreshBasicInfo()
+			end
+		end)
+	else
+		NAgui.BasicInfoUpdate.interval = updateInterval
+	end
+
+	if previousTab and previousTab ~= TAB_BASIC_INFO then
+		NAgui.setTab(previousTab)
+	end
+end
+
+NAgui.addTab(TAB_ROBLOX_DATA, { order = 8, textIcon = "tilt" })
+NAgui.setTab(TAB_ROBLOX_DATA)
+
+NAStuff.GitHubLoadingText = "Loading..."
+NAStuff.GitHubFailureText = "Failed to load commits"
+NAStuff.GitHubEmptyText = "No commits found"
+NAStuff.GitHubEndpointField = nil
+NAStuff.GitHubCommits = nil
+NAStuff.GitHubCommitMessageField = nil
+NAStuff.GitHubCommitAuthorField = nil
+NAStuff.GitHubCommitDateField = nil
+NAStuff.GitHubCommitsLastFetch = 0
+NAStuff.GitHubTabInitialized = false
+NAStuff.GitHubCommitHeaders = {
+	["User-Agent"] = "NamelessAdmin/1.0";
+	["Accept"] = "application/vnd.github+json";
+	["X-GitHub-Api-Version"] = "2022-11-28";
+}
+
+if getgenv and rawget(getgenv(), "GITHUB_TOKEN") then
+	local token = tostring(getgenv().GITHUB_TOKEN)
+	if token ~= "" then
+		NAStuff.GitHubCommitHeaders["Authorization"] = "Bearer "..token
+	end
+elseif getgenv and rawget(getgenv(), "GITHUB_AUTH") then
+	local auth = tostring(getgenv().GITHUB_AUTH)
+	if auth ~= "" then
+		NAStuff.GitHubCommitHeaders["Authorization"] = auth
+	end
+end
+
+NAStuff.RobloxVersionEndpoints = {
+	"https://weao.xyz/api/versions/current";
+	"http://weao.xyz/api/versions/current";
+}
+
+if getgenv and rawget(getgenv(), "WEAO_PROXY") and getgenv().WEAO_PROXY ~= "" then
+	Insert(NAStuff.RobloxVersionEndpoints, tostring(getgenv().WEAO_PROXY))
+end
+Insert(NAStuff.RobloxVersionEndpoints, "https://r.jina.ai/http://weao.xyz/api/versions/current")
+Insert(NAStuff.RobloxVersionEndpoints, "https://r.jina.ai/http://weao.xyz/api/versions/current?format=json")
+
+NAStuff.RobloxVersionHeaders = {
+	["User-Agent"] = "WEAO-3PService";
+	["Accept"] = "application/json";
+	["Origin"] = "https://weao.xyz";
+	["Referer"] = "https://weao.xyz/";
+}
+
+if getgenv and rawget(getgenv(), "WEAO_COOKIE") and getgenv().WEAO_COOKIE ~= "" then
+	NAStuff.RobloxVersionHeaders["Cookie"] = getgenv().WEAO_COOKIE
+end
+
+originalIO.parseRobloxVersionBody=function(body)
+	if type(body) ~= "string" then return nil end
+	if body:sub(1,3) == "\239\187\191" then body = body:sub(4) end
+	local ok, decoded = pcall(HttpService.JSONDecode, HttpService, body)
+	if ok and type(decoded) == "table" then return decoded end
+	local a,depth,inStr,esc=nil,0,false,false
+	for i=1,#body do
+		local c=body:sub(i,i)
+		if inStr then
+			if esc then esc=false elseif c=="\\" then esc=true elseif c=='"' then inStr=false end
+		else
+			if c=='"' then inStr=true
+			elseif c=='{' then depth=depth+1 a=a or i
+			elseif c=='}' and depth>0 then
+				depth=depth-1
+				if depth==0 and a then
+					local ok2, j = pcall(HttpService.JSONDecode, HttpService, body:sub(a,i))
+					if ok2 and type(j)=="table" then return j end
+				end
+			end
+		end
+	end
+	return nil
+end
+
+originalIO.fetchGitHubCommits = function(forceRefresh)
+	local cached = NAStuff.GitHubCommits
+	local lastFetch = NAStuff.GitHubCommitsLastFetch or 0
+	if cached and not forceRefresh and (tick() - lastFetch) < 300 then
+		return true, cached
+	end
+
+	local requestFunc = opt and opt.NAREQUEST
+	if type(requestFunc) ~= "function" then
+		return false, "HTTP request function is unavailable"
+	end
+
+	local baseUrl = opt and opt.githubUrl
+	if type(baseUrl) ~= "string" or baseUrl == "" then
+		return false, "GitHub URL is not configured"
+	end
+
+	local endpoints = {}
+	local function appendEndpoint(url)
+		if url and url ~= "" then
+			Insert(endpoints, url)
+		end
+	end
+
+	appendEndpoint(baseUrl)
+
+	if not baseUrl:lower():find("^https?://r%.jina%.ai/") then
+		appendEndpoint("https://r.jina.ai/"..baseUrl)
+	end
+
+	if getgenv and rawget(getgenv(), "GITHUB_PROXY") then
+		local proxy = tostring(getgenv().GITHUB_PROXY)
+		if proxy ~= "" then
+			appendEndpoint(proxy)
+		end
+	end
+
+	local headers = {}
+	for key, value in pairs(NAStuff.GitHubCommitHeaders or {}) do
+		headers[key] = value
+	end
+
+	local lastError
+	for _, endpoint in ipairs(endpoints) do
+		local sep = endpoint:find("?", 1, true) and "&" or "?"
+		local cacheBuster = "_="..tostring(os.time())..tostring(math.random(1, 1e6))
+		local url = endpoint..sep..cacheBuster
+		local okRequest, response = pcall(requestFunc, {
+			Url = url;
+			Method = "GET";
+			Headers = headers;
+			Timeout = 8;
+			FollowRedirects = true;
+			SslVerify = false;
+		})
+		if okRequest and response then
+			local status = tonumber(response.StatusCode) or tonumber(response.Status)
+			local body = response.Body or response.body
+			if status == 200 and type(body) == "string" then
+				local decodeOk, decoded = pcall(HttpService.JSONDecode, HttpService, body)
+				if decodeOk and type(decoded) == "table" then
+					NAStuff.GitHubCommits = decoded
+					NAStuff.GitHubCommitsLastFetch = tick()
+					return true, decoded
+				else
+					lastError = "Invalid JSON response"
+				end
+			elseif status == 304 and cached then
+				NAStuff.GitHubCommitsLastFetch = tick()
+				return true, cached
+			else
+				local statusText = status and tostring(status) or "unknown"
+				lastError = Format("GitHub request failed (HTTP %s)", statusText)
+			end
+		else
+			local err = okRequest and "Unknown response error" or tostring(response)
+			lastError = err
+		end
+	end
+
+	if type(baseUrl) == "string" and baseUrl ~= "" then
+		local sep = baseUrl:find("?", 1, true) and "&" or "?"
+		local cacheBuster = "_="..tostring(os.time())..tostring(math.random(1, 1e6))
+		local directUrl = baseUrl..sep..cacheBuster
+		local okDirect, bodyDirect = pcall(function()
+			return HttpService:GetAsync(directUrl)
+		end)
+		if okDirect and type(bodyDirect) == "string" then
+			local decodeOk, decoded = pcall(HttpService.JSONDecode, HttpService, bodyDirect)
+			if decodeOk and type(decoded) == "table" then
+				NAStuff.GitHubCommits = decoded
+				NAStuff.GitHubCommitsLastFetch = tick()
+				return true, decoded
+			end
+		end
+	end
+
+	return false, lastError or NAStuff.GitHubFailureText
+end
+
+originalIO.sanitizeCommitMessage = function(message)
+	message = tostring(message or "(no message)")
+	message = message:gsub("[%c]", " ")
+	message = message:gsub("%s+", " ")
+	if #message > 70 then
+		message = message:sub(1, 67).."..."
+	end
+	return message
+end
+
+originalIO.formatCommitAuthor = function(commit)
+	if type(commit) ~= "table" then
+		return "Unknown author"
+	end
+	local commitInfo = commit.commit or {}
+	local authorInfo = commitInfo.author or {}
+	local fallbackAuthor = commit.author or {}
+	local nickname = authorInfo.name
+	local username = fallbackAuthor.login
+	if nickname and username then
+		if nickname == username then
+			return nickname
+		else
+			return Format("%s (%s)", nickname, username)
+		end
+	elseif nickname then
+		return nickname
+	elseif username then
+		return username
+	end
+	return "Unknown author"
+end
+
+originalIO.formatCommitDate = function(isoDate)
+	if type(isoDate) ~= "string" then
+		return "Unknown date", nil
+	end
+	local year, month, day, hour, minute = isoDate:match("^(%d+)%-(%d+)%-(%d+)T(%d+):(%d+)")
+	if year and month and day and hour and minute then
+		local display = Format("%02d/%02d/%s %s:%s UTC", tonumber(month), tonumber(day), year, hour, minute)
+		local shortDate = Format("%02d/%02d/%s", tonumber(month), tonumber(day), year)
+		return display, shortDate
+	end
+	return isoDate, nil
+end
+
+NAmanage.FormatGitHubCommitSummary = function(commit)
+	if type(commit) ~= "table" then
+		return NAStuff.GitHubFailureText
+	end
+	local sha = commit.sha and tostring(commit.sha):sub(1, 7) or "unknown"
+	local commitInfo = commit.commit or {}
+	local message = originalIO.sanitizeCommitMessage(commitInfo.message)
+	return Format("%s (%s)", message, sha)
+end
+
+NAmanage.UpdateGitHubCommitUI = function(commits, statusMessage)
+	commits = commits or NAStuff.GitHubCommits
+	local commit = (type(commits) == "table" and commits[1]) or nil
+	local messageField = NAStuff.GitHubCommitMessageField
+	local authorField = NAStuff.GitHubCommitAuthorField
+	local dateField = NAStuff.GitHubCommitDateField
+
+	local endpointField = NAStuff.GitHubEndpointField
+	if endpointField then
+		endpointField.Text = (type(opt.githubUrl) == "string" and opt.githubUrl ~= "" and opt.githubUrl) or "Unavailable"
+	end
+
+	if commit then
+		local message = NAmanage.FormatGitHubCommitSummary(commit)
+		local authorDisplay = originalIO.formatCommitAuthor(commit)
+		local commitInfo = commit.commit or {}
+		local authorInfo = commitInfo.author or commitInfo.committer or {}
+		local dateDisplay, shortDate = originalIO.formatCommitDate(authorInfo.date)
+
+		if messageField then
+			messageField.Text = message or NAStuff.GitHubEmptyText
+		end
+		if authorField then
+			authorField.Text = authorDisplay or NAStuff.GitHubEmptyText
+		end
+		if dateField then
+			dateField.Text = dateDisplay or NAStuff.GitHubEmptyText
+		end
+
+		if shortDate then
+			opt.NAupdDate = shortDate
+		end
+	else
+		local fallback = statusMessage or NAStuff.GitHubEmptyText
+		if messageField then
+			messageField.Text = fallback
+		end
+		if authorField then
+			authorField.Text = fallback
+		end
+		if dateField then
+			dateField.Text = fallback
+		end
+	end
+end
+
+NAmanage.RefreshGitHubCommits = function(forceRefresh)
+	local ok, result = originalIO.fetchGitHubCommits(forceRefresh)
+	if ok then
+		NAmanage.UpdateGitHubCommitUI(result)
+	else
+		local message = result or NAStuff.GitHubFailureText
+		if type(message) == "string" and #message > 128 then
+			message = message:sub(1, 125).."..."
+		end
+		warn("[NA] GitHub commit fetch failed:", message)
+		NAmanage.UpdateGitHubCommitUI(nil, "Error: "..message)
+	end
+	return ok
+end
+
+NAmanage.UpdateAdminInfoTabDisplayName = function()
+	if not TabManager or not TabManager.tabs then return end
+	local info = TabManager.tabs[TAB_ADMIN_INFO]
+	if not info then return end
+	local displayText = (adminName or "Admin").." Info"
+	info.displayName = displayText
+	if originalIO.applyTabDisplayText then
+		originalIO.applyTabDisplayText(info, { isActive = info._isActive })
+	elseif info.button then
+		local title = info.button:FindFirstChild("Title")
+		if title then
+			title.Text = displayText
+		end
+	end
+end
+
+originalIO.fetchRobloxVersionData=function(forceRefresh)
+	local cached = NAStuff.RobloxVersionData
+	local lastFetch = NAStuff.RobloxVersionLastFetch or 0
+	if cached and not forceRefresh and (tick() - lastFetch) < 300 then
+		return true, cached
+	end
+
+	local requestFunc = opt and opt.NAREQUEST
+	for _, baseUrl in ipairs(NAStuff.RobloxVersionEndpoints) do
+		if baseUrl and baseUrl ~= "" then
+			local url = baseUrl..((Find(baseUrl, "?", 1, true) and "&" or "?").."_="..tostring(os.time())..tostring(math.random(1,1e6)))
+			if requestFunc then
+				local ok1, response = pcall(requestFunc, { Url = url; Method = "GET"; Headers = NAStuff.RobloxVersionHeaders; Timeout = 6; FollowRedirects = true; SslVerify = false; })
+				if ok1 and response then
+					local body = response.Body or response.body or response.Data or response.data or response.Text or response.text or response.Content or response.content or response[1]
+					body = tostring(body or "")
+					local decoded = originalIO.parseRobloxVersionBody(body)
+					if decoded then
+						NAStuff.RobloxVersionData = decoded
+						NAStuff.RobloxVersionLastFetch = tick()
+						return true, decoded
+					end
+				end
+				local ok2, response2 = pcall(requestFunc, { Url = url; Method = "GET"; Headers = {["Accept"]="application/json"}; Timeout = 6; FollowRedirects = true; SslVerify = false; })
+				if ok2 and response2 then
+					local body2 = response2.Body or response2.body or response2.Data or response2.data or response2.Text or response2.text or response2.Content or response2.content or response2[1]
+					body2 = tostring(body2 or "")
+					local decoded2 = originalIO.parseRobloxVersionBody(body2)
+					if decoded2 then
+						NAStuff.RobloxVersionData = decoded2
+						NAStuff.RobloxVersionLastFetch = tick()
+						return true, decoded2
+					end
+				end
+			end
+			local ok3, body3 = pcall(function() return game and game.HttpGet and game:HttpGet(url) end)
+			if ok3 and type(body3) == "string" then
+				local decoded3 = originalIO.parseRobloxVersionBody(body3)
+				if decoded3 then
+					NAStuff.RobloxVersionData = decoded3
+					NAStuff.RobloxVersionLastFetch = tick()
+					return true, decoded3
+				end
+			end
+		end
+	end
+
+	return false, cached
+end
+
+NAStuff.RobloxVersionLoadingText = "Loading..."
+NAStuff.RobloxVersionMissingText = "Unavailable"
+NAStuff.RobloxVersionFailureText = "Failed to load"
+
+NAStuff.RobloxVersionRows = {}
+originalIO.addRobloxVersionSection=function(sectionTitle, versionKey, dateKey)
+	NAgui.addSection(sectionTitle)
+	local versionField = NAgui.addInfo("Version", NAStuff.RobloxVersionLoadingText)
+	local updatedField = NAgui.addInfo("Last Updated", NAStuff.RobloxVersionLoadingText)
+	Insert(NAStuff.RobloxVersionRows, {
+		versionKey = versionKey;
+		dateKey = dateKey;
+		versionField = versionField;
+		dateField = updatedField;
+	})
+end
+
+NAgui.addSection("Powered by weao.xyz API")
+originalIO.addRobloxVersionSection("Windows", "Windows", "WindowsDate")
+originalIO.addRobloxVersionSection("Mac", "Mac", "MacDate")
+originalIO.addRobloxVersionSection("Android", "Android", "AndroidDate")
+originalIO.addRobloxVersionSection("iOS", "iOS", "iOSDate")
+
+SpawnCall(function()
+	local ok, data = originalIO.fetchRobloxVersionData()
+	local fallbackText = ok and NAStuff.RobloxVersionMissingText or NAStuff.RobloxVersionFailureText
+	for _, entry in ipairs(NAStuff.RobloxVersionRows) do
+		if entry.versionField then
+			local v = (type(data) == "table" and data[entry.versionKey]) or fallbackText
+			entry.versionField.Text = v and tostring(v) or fallbackText
+		end
+		if entry.dateField then
+			local d = (type(data) == "table" and data[entry.dateKey]) or fallbackText
+			entry.dateField.Text = d and tostring(d) or fallbackText
+		end
+	end
+end)
+
+NAgui.addTab(TAB_ADMIN_INFO, { order = 9, displayText = adminInfoDisplay })
+NAgui.setTab(TAB_ADMIN_INFO)
+
+if NAmanage.UpdateAdminInfoTabDisplayName then
+	NAmanage.UpdateAdminInfoTabDisplayName()
+end
+
+if not NAStuff.GitHubTabInitialized then
+	NAgui.addSection("Latest Commit")
+	NAStuff.GitHubCommitMessageField = NAgui.addInfo("Commit", NAStuff.GitHubLoadingText)
+	NAStuff.GitHubCommitAuthorField = NAgui.addInfo("Author", NAStuff.GitHubLoadingText)
+	NAStuff.GitHubCommitDateField = NAgui.addInfo("Updated", NAStuff.GitHubLoadingText)
+
+	NAgui.addButton("Refresh Commits", function()
+		NAmanage.UpdateGitHubCommitUI(nil, NAStuff.GitHubLoadingText)
+		SpawnCall(function()
+			local ok, result = originalIO.fetchGitHubCommits(true)
+			if ok then
+				NAmanage.UpdateGitHubCommitUI(result)
+				if DoNotif then
+					DoNotif("GitHub commits updated.", 2)
+				end
+			else
+				local message = result or NAStuff.GitHubFailureText
+				if type(message) == "string" and #message > 128 then
+					message = message:sub(1, 125).."..."
+				end
+				warn("[NA] GitHub commit refresh failed:", message)
+				NAmanage.UpdateGitHubCommitUI(nil, "Error: "..tostring(message))
+				if DoNotif then
+					DoNotif("Failed to refresh GitHub commits.", 3)
+				end
+			end
+		end)
+	end)
+
+	NAStuff.GitHubTabInitialized = true
+end
+
+NAmanage.UpdateGitHubCommitUI(nil, NAStuff.GitHubLoadingText)
+
+SpawnCall(function()
+	NAmanage.RefreshGitHubCommits(false)
+end)
+
+NAgui.setTab(NAgui.getActiveTab())
 
 NAgui.setTab(TAB_CHAT)
 
